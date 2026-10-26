@@ -2,7 +2,7 @@
 
 Privacy-first Windows maintenance app: discover unnecessary files, quantify recoverable storage, execute reviewed cleanup safely. Flutter desktop UI + C#/.NET engine over an ACL'd named pipe.
 
-**Status:** M0+M1 complete — engine host, contracts, read-only scanner, Flutter scan UI, 27 .NET + 6 Dart tests. No deletion is implemented yet (M2 gate).
+**Status:** Active development — unified Smart Scan with journaled, restorable quarantine; duplicate keeper review; storage intelligence; app inventory + review-only leftover evidence; startup inventory with disabled-state; optional local AI. 384 .NET + 72 Flutter tests green. No permanent-delete path exists by design.
 
 ## Layout
 
@@ -56,7 +56,7 @@ Measured on the dev machine (2026-10-27), not marketing claims:
 
 ## Safety posture
 
-M1 is read-only by construction: the engine exposes scan/preview/cancel/history only; `cleanup.commit` returns `cleanup_not_enabled`. Deletion lands in M2 behind session-bound candidate IDs, pre-execution revalidation, and quarantine-first semantics — see `docs/cleanup-policy.md`.
+Every mutation flows through one engine-enforced pipeline: preview → explicit approval of the exact candidate set → per-item revalidation → journaled same-volume quarantine → SHA-256 integrity verification → restore. Candidate IDs are opaque and session-bound; stale, changed, or inaccessible items fail closed rather than being skipped silently. There is no permanent-delete path and no silent cleanup — see `docs/cleanup-policy.md`.
 
 ## Contributing
 
