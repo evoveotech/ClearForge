@@ -9,15 +9,18 @@ Last updated: 2026-10-27 (post-M8.4b, HEAD ~`ff85847`).
 - [x] `flutter test` (70) + `flutter analyze` clean
 - [x] `flutter build windows --release` produces a working binary (verified: app launches, spawns bundled engine)
 - [x] Packaged layout verified: `engine\ClearForge.Host.exe` beside app resolves and spawns
-- [x] Portable ZIP package reproducible (`packaging\build-package.ps1` → 28 MB, clean-extract launch verified)
+- [x] Portable ZIP package reproducible (`packaging\build-package.ps1` → 47 MB, clean-extract launch verified)
+- [x] Inno Setup installer builds (`packaging\inno\clearforge.iss` + Inno 6.7.3 → `clearforge-setup-windows-x64-0.1.0-m1.exe`)
+- [x] Silent install verified: `/VERYSILENT` → 213 files under `%LOCALAPPDATA%\Programs\ClearForge`, HKCU uninstall key, Start Menu entry
+- [x] Installed app launches and spawns bundled engine
+- [x] Silent uninstall verified: program files removed, user data (journal/quarantine/models) preserved
 - [x] M4.4 GUI workflow passes end-to-end on CI (scan→cancel→commit→byte-identical restore→plan)
 - [ ] Destructive-test scenarios on disposable VM snapshots (only local user-dir verified)
 - [ ] ARM64 CI lane + ARM64 build/test (x64 only today)
-- [ ] Installer: Inno Setup script exists (`packaging/inno/clearforge.iss`); built artifact not yet produced or tested
-- [ ] Self-contained engine decision (zip currently requires .NET 8 Desktop Runtime on the machine)
+- [x] Self-contained engine (`win-x64`) — zero .NET-runtime prerequisite
+- [ ] Upgrade / rollback validation (install-over-install not yet tested; file-replace path only)
 - [ ] Code-signed engine + UI binaries; signature verification test — **BLOCKED on signing identity**
-- [ ] Upgrade / uninstall / rollback validation on a clean machine
-- [ ] Clean-machine install test (dependency-free target verified end-to-end)
+- [ ] Clean-machine install test (installer verified on dev machine only; a machine without the dev toolchain is still unverified)
 - [ ] Privacy policy + vulnerability-disclosure channel published
 - [x] No "performance boost" / "100% safe" claims in UI or docs (audited during copy review)
 - [ ] Trademark/domain check for "ClearForge"

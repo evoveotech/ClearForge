@@ -5,7 +5,7 @@
 | Channel | Status |
 |---|---|
 | Portable ZIP (`clearforge-windows-x64-*.zip`) | Works — unsigned, per-user |
-| Inno Setup installer (`packaging/inno/clearforge.iss`) | Script ready — requires Inno Setup 6 + signing for release |
+| Inno Setup installer (`packaging/inno/clearforge.iss`) | Builds + verified: silent install/uninstall, engine spawn, data preservation — unsigned |
 | Code signing / SmartScreen reputation | **BLOCKED** — needs a code-signing identity |
 | macOS | **BLOCKED** — no macOS build environment has been verified |
 
@@ -16,11 +16,30 @@ signed builds before claiming consumer-ready install.
 ## Requirements
 
 - Windows 10 (1809+) or Windows 11, x64
-- .NET 8 Desktop Runtime is **bundled requirement** — the engine
-  (`engine\ClearForge.Host.exe`) is framework-dependent. Install the
-  [.NET 8 Desktop Runtime x64](https://dotnet.microsoft.com/download/dotnet/8.0)
-  or ship a self-contained engine build (see below).
-- No admin rights required — everything runs per-user.
+- No admin rights and **no .NET runtime prerequisite** — the engine is
+  published self-contained (`win-x64`) inside `engine\`.
+
+## Installer (recommended)
+
+`packaging\inno\clearforge.iss` — build with Inno Setup 6:
+
+```
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\inno\clearforge.iss
+# (or: & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" ...)
+```
+
+Produces `dist\clearforge-setup-windows-x64-<v>.exe` — per-user install
+(`%LOCALAPPDATA%\Programs\ClearForge`, no admin), Start Menu entry, and a
+registered uninstall entry. Verified silent flows:
+
+```
+setup.exe /VERYSILENT /NORESTART          # install (verified: 213 files)
+unins000.exe /VERYSILENT /NORESTART       # uninstall (verified: data kept)
+```
+
+Caveat when scripting from Git Bash: use PowerShell or `//VERYSILENT`
+(double slash) — MSYS2 converts `/VERYSILENT` to a path and the wizard
+opens interactively.
 
 ## Portable ZIP
 
@@ -39,13 +58,6 @@ bundled engine on the `clearforge.engine.v1` ACL-protected pipe.
 - Uninstall: delete the folder. Recovery data (journal + quarantine)
   is intentionally left behind — delete `%LOCALAPPDATA%\ClearForge` only
   if you are certain nothing quarantined needs restoring.
-
-## Self-contained engine (no runtime dependency)
-
-`dotnet publish native/ClearForge.Host -c Release -r win-x64 --self-contained`
-— larger package (~70 MB) but removes the .NET runtime prerequisite.
-Consider this for the first public package; the packaging script currently
-produces framework-dependent output.
 
 ## macOS
 

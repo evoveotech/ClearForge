@@ -16,7 +16,9 @@ $stage = Join-Path $dist 'stage\ClearForge'
 
 Push-Location $repo
 try {
-    dotnet publish native/ClearForge.Host -c Release -o $pub --nologo
+    # Self-contained win-x64: larger package, zero .NET-runtime prerequisite.
+    dotnet publish native/ClearForge.Host -c Release -r win-x64 `
+        --self-contained true -o $pub --nologo
     if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)" }
     Push-Location apps\desktop_flutter
     flutter build windows --release
@@ -27,6 +29,14 @@ try {
     New-Item -ItemType Directory -Force -Path "$stage\engine" | Out-Null
     Copy-Item "$rel\*" $stage -Recurse -Exclude 'engine'
     Copy-Item "$pub\*" "$stage\engine" -Recurse
+
+    # Drop non-Windows runtime natives (e_sqlite3 ships every platform).
+    $rt = "$stage\engine\runtimes"
+    if (Test-Path $rt) {
+        Get-ChildItem $rt -Directory |
+            Where-Object Name -notlike 'win-*' |
+            Remove-Item -Recurse -Force
+    }
 
     # Deterministic package contents: no pdb, no test artifacts.
     Get-ChildItem $stage -Recurse -Filter '*.pdb' | Remove-Item -Force

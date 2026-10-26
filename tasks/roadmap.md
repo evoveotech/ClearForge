@@ -32,7 +32,7 @@ RELEASE-READY / SHIPPED / BLOCKED — never interchange.
 | M8.5b | Startup: Task Scheduler + services read-only, toggling (journaled) | TODO | dep M8.5 |
 | M9 | Extensions inventory (review-only), monitoring/tray, winget drift, browser history/cookies (lifecycle review gate), scheduling | TODO | gap doc §M9+ |
 | REL-1 | Engine discovery Debug-path-only → packaged layout + resolution order | DONE/VERIFIED | `resolveEnginePath`: exePath → env → packaged → Release/Debug walk-up; 9 tests |
-| REL-2 | Installer: MSIX/signed-installer ADR → build → upgrade/rollback/uninstall tests | PARTIAL | portable self-contained ZIP (`packaging/build-package.ps1`) reproducible + clean-extract verified; Inno script staged; signing BLOCKED on identity |
+| REL-2 | Installer: MSIX/signed-installer ADR → build → upgrade/rollback/uninstall tests | DONE-verify | portable ZIP + Inno installer built & verified: silent install (213 files), engine spawn, silent uninstall, user-data preserved; signing BLOCKED on identity; upgrade/rollback + clean-machine still open |
 | MAC-1 | macOS platform: runner, roots, fs identity, IPC transport, quarantine adapter | BLOCKED | no macOS hardware/toolchain on this machine; engineering + tests only, never claim release-ready |
 
 ## Platform capability matrix
