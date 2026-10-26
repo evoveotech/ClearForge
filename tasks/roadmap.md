@@ -30,7 +30,7 @@ RELEASE-READY / SHIPPED / BLOCKED — never interchange.
 | M8.4b | Leftover mapping + guided uninstall (deep-link only, never auto-run) | TODO | dep M8.4a |
 | M8.5 | Startup completeness: HKLM, StartupApproved disabled-state, Task Scheduler/services read-only | TODO | gap doc §M8.5 |
 | M9 | Extensions inventory (review-only), monitoring/tray, winget drift, browser history/cookies (lifecycle review gate), scheduling | TODO | gap doc §M9+ |
-| REL-1 | Engine discovery Debug-path-only → packaged layout + resolution order | TODO | `engine_pipe_client.dart` hardcodes `bin\Debug` path |
+| REL-1 | Engine discovery Debug-path-only → packaged layout + resolution order | DONE/VERIFIED | `resolveEnginePath`: exePath → env → packaged → Release/Debug walk-up; 9 tests |
 | REL-2 | Installer: MSIX/signed-installer ADR → build → upgrade/rollback/uninstall tests | TODO | `installer/` empty; `docs/release-checklist.md` |
 | MAC-1 | macOS platform: runner, roots, fs identity, IPC transport, quarantine adapter | BLOCKED | no macOS hardware/toolchain on this machine; engineering + tests only, never claim release-ready |
 
@@ -67,6 +67,8 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
 | macOS entirely unbuilt and unverifiable on this host | High | MAC-1 | BLOCKED externally |
 | Leftover name-matching false positives (M8.4b) | Med | M8.4b | mitigate: lineage model + never-flag list + review-only default |
 | Session/eviction bounds | Closed | — | MaxSessions=128, 60min retention, scanning never evicted |
+| Quarantine same-volume rule means a user with TEMP on a non-OS volume gets `cross_volume_refused` for the whole temp category (found via CI where workspace TEMP is on D:) | Med | — | open — per-volume quarantine roots are a design decision; documented, not silently changed |
+| CI `flutter test` includes live-pipe tests needing a built engine | Closed | — | lanes build engine; tests resolve via `resolveEnginePath` |
 | `config/*.yaml` drift vs compiled rules | Low | — | sync enforced by tests per DefaultRules header; audit during M8.4b |
 
 ## Next actions

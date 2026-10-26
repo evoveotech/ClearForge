@@ -79,6 +79,18 @@ void main() {
       expect(requireIsolatedTemp(tmp), temp.path,
           reason: 'TMP must resolve to the same test-owned root as TEMP');
     }
+    // Quarantine is same-volume-only by design: fixtures under a TEMP on a
+    // different volume than %LOCALAPPDATA% would all return
+    // cross_volume_refused — fail fast with the real reason instead of a
+    // cryptic 'skipped' outcome later.
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    if (localAppData != null && localAppData.isNotEmpty) {
+      expect(temp.path.substring(0, 1).toUpperCase(),
+          localAppData.substring(0, 1).toUpperCase(),
+          reason: 'M44 requires the isolated TEMP on the same volume as '
+              '%LOCALAPPDATA% (quarantine root), got TEMP=${temp.path} vs '
+              'LOCALAPPDATA=$localAppData');
+    }
     print('[M44] isolated TEMP=${temp.path}');
 
     // Engine-instance ownership: a unique test-owned pipe name plus a strict

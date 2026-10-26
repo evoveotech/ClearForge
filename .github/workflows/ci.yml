@@ -66,12 +66,16 @@ jobs:
         run: dotnet build native/ClearForge.sln --nologo
       - name: Isolated M44 GUI workflow test (test-owned TEMP)
         working-directory: apps/desktop_flutter
-        env:
-          TEMP: ${{ github.workspace }}\cf-m44-ci
-          TMP: ${{ github.workspace }}\cf-m44-ci
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force $env:TEMP | Out-Null
+          # TEMP must share a volume with %LOCALAPPDATA%: the engine's
+          # quarantine is same-volume-only and github.workspace lives on D:
+          # while LocalAppData is on C: — a workspace TEMP would make every
+          # fixture cross_volume_refused.
+          $isolated = Join-Path $env:USERPROFILE 'cf-m44-ci'
+          New-Item -ItemType Directory -Force $isolated | Out-Null
+          $env:TEMP = $isolated
+          $env:TMP = $isolated
           flutter config --enable-windows-desktop
           flutter pub get
           flutter test integration_test/m44_verify_test.dart -d windows
