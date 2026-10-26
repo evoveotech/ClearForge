@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:clearforge_desktop/app/clearforge_app.dart';
 import 'package:clearforge_desktop/core/state/engine_controller.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
