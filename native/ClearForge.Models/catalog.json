@@ -1,0 +1,43 @@
+{
+  "catalogVersion": 1,
+  "models": [
+    {
+      "id": "qwen2.5-1.5b-instruct-q4_k_m",
+      "displayName": "Qwen2.5 1.5B Instruct (Q4_K_M)",
+      "publisher": "bartowski — community GGUF quantisation of Qwen",
+      "repository": "bartowski/Qwen2.5-1.5B-Instruct-GGUF",
+      "upstreamRepository": "Qwen/Qwen2.5-1.5B-Instruct",
+      "revision": "9eadc66189c7641e1ddd226b8267a9119b2ce2d4",
+      "artifact": {
+        "fileName": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        "url": "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/9eadc66189c7641e1ddd226b8267a9119b2ce2d4/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+        "sha256": "1adf0b11065d8ad2e8123ea110d1ec956dab4ab038eab665614adba04b6c3370",
+        "sizeBytes": 986048768,
+        "format": "gguf",
+        "allowedRedirectHosts": [
+          "huggingface.co",
+          "*.huggingface.co",
+          "xethub.hf.co",
+          "*.xethub.hf.co"
+        ]
+      },
+      "license": {
+        "id": "apache-2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "runtime": {
+        "backend": "llamasharp/0.30.0 llama.cpp",
+        "acceleration": "cpu",
+        "architectures": ["x64"]
+      },
+      "requirements": {
+        "minRamBytesEstimate": 3221225472,
+        "minFreeStorageBytesEstimate": 2147483648,
+        "estimatesAreApproximate": true
+      },
+      "supportStatus": "recommended",
+      "qualityNotes": "Provenance-verified artifact: pinned upstream commit plus pinned SHA-256. Intent parsing was only smoke-tested in M7.1 — grammar-constrained output is revalidated, but semantic reliability is NOT established. Treat interpretations as suggestions; the deterministic planner stays authoritative.",
+      "evaluation": null
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+# ClearForge M1 cleanup-rule catalog (human-review surface).
+# The executed truth lives compiled in native/ClearForge.Windows/DefaultRules.cs;
+# any change here MUST be mirrored there and covered by tests. Rules are
+# versioned; never mutate an existing rule id — bump `version` for changes.
+#
+# `include_patterns` (optional): filename-only Win32 globs applied to files
+# inside the root — it can only narrow a rule, never widen it past its root.
+
+catalog_version: 1
+rules:
+  - id: user-temp-expired-files
+    version: 1
+    category: temporary-files
+    scope: current-user
+    root: user-temp                 # resolves via trusted root registry only
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-crash-dumps
+    version: 1
+    category: crash-dumps
+    scope: current-user
+    root: user-crash-dumps          # %LOCALAPPDATA%\CrashDumps when present
+    minimum_age_hours: 24
+    risk: medium
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 10000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  # --- M8.2 categories -----------------------------------------------------
+
+  - id: user-thumbnail-cache
+    version: 1
+    category: thumbnail-cache
+    scope: current-user
+    root: user-thumbnail-cache      # %LOCALAPPDATA%\Microsoft\Windows\Explorer
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 10000
+    exclude_locked: true
+    follow_reparse_points: false
+    include_patterns:               # Explorer regenerates these on demand
+      - "thumbcache_*.db"
+      - "iconcache_*.db"
+
+  - id: user-d3d-shader-cache
+    version: 1
+    category: gpu-shader-cache
+    scope: current-user
+    root: user-d3d-shader-cache     # %LOCALAPPDATA%\D3DSCache
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-nvidia-dx-shader-cache
+    version: 1
+    category: gpu-shader-cache
+    scope: current-user
+    root: user-nvidia-dx-shader-cache   # %LOCALAPPDATA%\NVIDIA\DXCache
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-nvidia-gl-shader-cache
+    version: 1
+    category: gpu-shader-cache
+    scope: current-user
+    root: user-nvidia-gl-shader-cache   # %LOCALAPPDATA%\NVIDIA\GLCache
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-amd-dx-shader-cache
+    version: 1
+    category: gpu-shader-cache
+    scope: current-user
+    root: user-amd-dx-shader-cache  # %LOCALAPPDATA%\AMD\DxCache
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-amd-gl-shader-cache
+    version: 1
+    category: gpu-shader-cache
+    scope: current-user
+    root: user-amd-gl-shader-cache  # %LOCALAPPDATA%\AMD\GLCache
+    minimum_age_hours: 24
+    risk: low
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-nuget-http-cache
+    version: 1
+    category: package-manager-caches
+    scope: current-user
+    root: user-nuget-http-cache     # %LOCALAPPDATA%\NuGet\v3-cache
+    minimum_age_hours: 24
+    risk: medium                  # regeneration needs network for remote packages
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-nuget-plugins-cache
+    version: 1
+    category: package-manager-caches
+    scope: current-user
+    root: user-nuget-plugins-cache  # %LOCALAPPDATA%\NuGet\plugins-cache
+    minimum_age_hours: 24
+    risk: medium
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-npm-cache
+    version: 1
+    category: package-manager-caches
+    scope: current-user
+    root: user-npm-cache            # %LOCALAPPDATA%\npm-cache
+    minimum_age_hours: 24
+    risk: medium
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-yarn-cache
+    version: 1
+    category: package-manager-caches
+    scope: current-user
+    root: user-yarn-cache           # %LOCALAPPDATA%\Yarn\Cache
+    minimum_age_hours: 24
+    risk: medium
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-pip-cache
+    version: 1
+    category: package-manager-caches
+    scope: current-user
+    root: user-pip-cache            # %LOCALAPPDATA%\pip\Cache
+    minimum_age_hours: 24
+    risk: medium
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 50000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-wer-report-queue
+    version: 1
+    category: windows-error-reports
+    scope: current-user
+    root: user-wer-report-queue     # %LOCALAPPDATA%\Microsoft\Windows\WER\ReportQueue
+    minimum_age_hours: 24
+    risk: medium                  # queued reports pending upload have forensic value
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 10000
+    exclude_locked: true
+    follow_reparse_points: false
+
+  - id: user-wer-report-archive
+    version: 1
+    category: windows-error-reports
+    scope: current-user
+    root: user-wer-report-archive   # %LOCALAPPDATA%\Microsoft\Windows\WER\ReportArchive
+    minimum_age_hours: 24
+    risk: medium
+    requires_confirmation: true
+    action: quarantine
+    max_files_per_scan: 10000
+    exclude_locked: true
+    follow_reparse_points: false

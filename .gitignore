@@ -1,0 +1,13 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# Flutter/Dart
+.dart_tool/
+build/
+.flutter-plugins*
+
+# OS/editor
+Thumbs.db
+*.log

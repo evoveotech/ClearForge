@@ -1,0 +1,912 @@
+using System.Text.Json;
+using ClearForge.Contracts;
+using ClearForge.Engine.Scanning;
+
+namespace ClearForge.Host;
+
+public sealed record DispatchResult(object? Result, string? Error, string? Message)
+{
+    public static DispatchResult Ok(object result) => new(result, null, null);
+    public static DispatchResult Fail(string code, string message) => new(null, code, message);
+}
+
+/// <summary>
+/// Routes validated requests to engine services. The surface is an explicit
+/// allowlist — there is no path-accepting method.
+/// </summary>
+public sealed class RequestDispatcher
+{
+    private static readonly JsonSerializerOptions ParamsJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private readonly ScanSessionStore _scans;
+    private readonly ClearForge.Engine.Cleanup.QuarantineExecutor? _executor;
+    private readonly ClearForge.Engine.Cleanup.CleanupJournal? _journal;
+    private readonly ClearForge.Engine.Duplicates.DuplicateFinder? _dupes;
+    private readonly ClearForge.Engine.Startup.IStartupSource? _startup;
+    private readonly ClearForge.Engine.Privacy.BrowserPrivacyScanner? _privacy;
+    private readonly ClearForge.Engine.Privacy.BrowserCacheScanner? _cacheScan;
+    private readonly ClearForge.Engine.Duplicates.ScopeRegistry? _scopes;
+    private readonly Dictionary<string, ClearForge.Engine.Duplicates.DuplicateReport> _dupeReports = new();
+
+    public RequestDispatcher(ScanSessionStore scans,
+        ClearForge.Engine.Cleanup.QuarantineExecutor? executor = null,
+        ClearForge.Engine.Cleanup.CleanupJournal? journal = null,
+        ClearForge.Engine.Duplicates.DuplicateFinder? dupes = null,
+        ClearForge.Engine.Duplicates.ScopeRegistry? scopes = null,
+        ClearForge.Engine.Startup.IStartupSource? startup = null,
+        ClearForge.Engine.Privacy.BrowserPrivacyScanner? privacy = null,
+        ClearForge.Engine.Privacy.BrowserCacheScanner? cacheScan = null,
+        ClearForge.Engine.Storage.StorageInventory? inventory = null,
+        ClearForge.Engine.Storage.RecommendationActionBridge? actionBridge = null,
+        ClearForge.Models.ModelManager? models = null,
+        ClearForge.Engine.SmartScan.SmartScanCoordinator? smartScan = null)
+    {
+        _scans = scans;
+        _executor = executor;
+        _journal = journal;
+        _dupes = dupes;
+        _scopes = scopes;
+        _startup = startup;
+        _privacy = privacy;
+        _cacheScan = cacheScan;
+        _inventory = inventory;
+        _actionBridge = actionBridge;
+        _models = models;
+        _smartScan = smartScan;
+    }
+
+    private readonly ClearForge.Engine.SmartScan.SmartScanCoordinator? _smartScan;
+
+    public Task<DispatchResult> Dispatch(string method, JsonElement? p) => method switch
+    {
+        Protocol.Methods.HealthCheck => Task.FromResult(DispatchResult.Ok(
+            new HealthResponse("ok", EngineVersion.Value, Protocol.Version,
+                Environment.ProcessId))),
+
+        Protocol.Methods.StartScan => Task.FromResult(StartScan(p)),
+        Protocol.Methods.GetScanResults => Task.FromResult(GetResults(p)),
+        Protocol.Methods.CancelScan => Task.FromResult(CancelScan(p)),
+        Protocol.Methods.PreviewCleanup => Task.FromResult(Preview(p)),
+        Protocol.Methods.CommitCleanup => Task.FromResult(Commit(p)),
+        Protocol.Methods.GetOperationStatus => Task.FromResult(GetStatus(p)),
+        Protocol.Methods.GetCleanupHistory => Task.FromResult(GetCleanupHistory(p)),
+        Protocol.Methods.CleanupStatus => Task.FromResult(GetStatus(p)),
+        Protocol.Methods.CleanupRestore => Task.FromResult(Restore(p)),
+        Protocol.Methods.CleanupCancel => Task.FromResult(CancelScan(p)),
+        Protocol.Methods.DuplicatesStart => Task.FromResult(DuplicatesStart(p)),
+        Protocol.Methods.DuplicatesGroups => Task.FromResult(DuplicatesGroups(p)),
+        Protocol.Methods.StartupList => Task.FromResult(StartupList()),
+        Protocol.Methods.PrivacyDetect => Task.FromResult(PrivacyDetect()),
+        Protocol.Methods.PrivacyScanCache => Task.FromResult(PrivacyScanCache(p)),
+        Protocol.Methods.StorageInventory => Task.FromResult(StorageInventory(p)),
+        Protocol.Methods.StorageRecommend => Task.FromResult(StorageRecommend(p)),
+        Protocol.Methods.StoragePlan => Task.FromResult(StoragePlan(p)),
+        Protocol.Methods.SmartScanStart => Task.FromResult(SmartScanStart(p)),
+        Protocol.Methods.SmartScanStatus => Task.FromResult(SmartScanStatusResult(p)),
+        Protocol.Methods.SmartScanResults => Task.FromResult(SmartScanResults(p)),
+        Protocol.Methods.SmartScanCancel => Task.FromResult(SmartScanCancel(p)),
+
+        // M7.2 curated model catalogue + install lifecycle (engine-owned,
+        // outside the cleanup pipeline — the AI worker keeps no network or
+        // write authority; it re-verifies digest and model-root at load).
+        Protocol.Methods.ModelsCatalog => Task.FromResult(ModelsCatalog()),
+        Protocol.Methods.ModelsStatus => Task.FromResult(ModelsStatus()),
+        Protocol.Methods.ModelsInstall => Task.FromResult(ModelsInstall(p)),
+        Protocol.Methods.ModelsCancel => Task.FromResult(ModelsCancel(p)),
+        Protocol.Methods.ModelsRemove => Task.FromResult(ModelsRemove(p)),
+
+        _ => Task.FromResult(DispatchResult.Fail(
+            Protocol.Errors.UnknownMethod, $"method '{method}' is not supported")),
+    };
+
+    private DispatchResult StartScan(JsonElement? p)
+    {
+        StartScanRequest? req = null;
+        if (p is { ValueKind: JsonValueKind.Object })
+        {
+            try { req = p.Value.Deserialize<StartScanRequest>(ParamsJson); }
+            catch (JsonException) { return DispatchResult.Fail(Protocol.Errors.InvalidParams, "bad params"); }
+        }
+
+        try
+        {
+            var session = _scans.Start(req?.Categories);
+            return DispatchResult.Ok(new ScanSessionInfo(
+                session.Id, session.Status.ToString().ToLowerInvariant(),
+                0, 0));
+        }
+        catch (SessionCapacityException ex)
+        {
+            return DispatchResult.Fail(Protocol.Errors.SessionCapacity, ex.Message);
+        }
+    }
+
+    private DispatchResult GetResults(JsonElement? p)
+    {
+        var sessionId = ParamSessionId(p);
+        if (sessionId is null) return DispatchResult.Fail(Protocol.Errors.InvalidParams, "sessionId required");
+        if (!_scans.TryGet(sessionId, out var s)) return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "unknown session");
+
+        // Status and the item snapshot are read under one lock so the
+        // response is always a consistent point-in-time view.
+        List<(ScannedFile File, Contracts.ScanCandidate Public)> snapshot;
+        SessionStatus status;
+        lock (s.Items) { status = s.Status; snapshot = s.Items.ToList(); }
+
+        var categories = snapshot.GroupBy(i => i.Public.Category)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        return DispatchResult.Ok(new
+        {
+            sessionId = s.Id,
+            status = status.ToString().ToLowerInvariant(),
+            estimatedBytes = snapshot.Sum(i => i.Public.EstimatedBytes),
+            categories,
+            candidates = snapshot.Select(i => i.Public).ToArray(),
+            rawEnumerated = s.RawEnumerated,
+            // Rules whose enumeration hit the file cap — the listed candidate
+            // set is a bounded subset, not complete coverage.
+            truncatedRules = s.TruncatedRules.ToArray(),
+            lastError = s.LastError,
+        });
+    }
+
+    private DispatchResult CancelScan(JsonElement? p)
+    {
+        var sessionId = ParamSessionId(p);
+        if (sessionId is null) return DispatchResult.Fail(Protocol.Errors.InvalidParams, "sessionId required");
+        return _scans.Cancel(sessionId)
+            ? DispatchResult.Ok(new { sessionId, status = "cancelling" })
+            : DispatchResult.Fail(Protocol.Errors.SessionNotFound, "unknown session");
+    }
+
+    private DispatchResult Preview(JsonElement? p)
+    {
+        var (req, err) = Parse<PreviewCleanupRequest>(p);
+        if (err is not null) return err;
+        if (!_scans.TryGet(req!.SessionId, out var s))
+            return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "unknown session");
+        if (req.CandidateIds is null || req.CandidateIds.Count == 0)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "candidateIds required");
+
+        // Preview-time revalidation gate (e.g. browser running). Commit also
+        // re-checks per item — preview alone is not the safety boundary.
+        if (s.CommitGuard?.Invoke() is { } guardErr)
+            return DispatchResult.Fail(guardErr, "operation currently unsafe");
+
+        // Session freshness: preview reports an expired session honestly so
+        // the UI never presents a stale action as approvable. Commit still
+        // enforces TTL per item — this is the same gate, earlier.
+        if (_executor?.SessionTtl is { } ttl
+            && DateTimeOffset.UtcNow - s.CreatedUtc > ttl)
+            return DispatchResult.Fail(Protocol.Errors.SessionExpired,
+                "session expired — rescan required");
+
+        var resolved = _scans.ResolveCandidates(s, req.CandidateIds);
+        if (resolved.Count != req.CandidateIds.Distinct().Count())
+            return DispatchResult.Fail(Protocol.Errors.CandidateNotFound, "one or more candidateIds not in session");
+
+        // A successful preview records the engine-side approval a commit must
+        // match — this is the authoritative approval boundary; the Flutter UI
+        // is only a hint on top of it.
+        lock (s.Items)
+        {
+            s.Approval = new ApprovalGrant(
+                resolved.Select(i => i.Public.Id).ToHashSet(StringComparer.Ordinal),
+                DateTimeOffset.UtcNow);
+        }
+
+        return DispatchResult.Ok(new
+        {
+            sessionId = s.Id,
+            candidateCount = resolved.Count,
+            estimatedBytes = resolved.Sum(i => i.Public.EstimatedBytes),
+            candidates = resolved.Select(i => new
+            {
+                i.Public.Id, i.Public.DisplayName, i.Public.Category,
+                i.Public.EstimatedBytes, i.Public.Risk,
+                eligibility = ProbeEligibility(i.File),
+            }).ToArray(),
+        });
+    }
+
+    /// <summary>
+    /// Read-only per-candidate eligibility probe at preview time, mirroring
+    /// the executor's revalidation gates without mutating anything: lets the
+    /// approval UI show which items would be skipped and why. Commit still
+    /// re-validates — this is informational.
+    /// </summary>
+    private static string ProbeEligibility(ScannedFile file)
+    {
+        FileInfo current;
+        try { current = new FileInfo(file.CanonicalPath); }
+        catch { return "unreadable"; }
+        if (!current.Exists) return "missing";
+        if (current.Attributes.HasFlag(FileAttributes.ReparsePoint)) return "reparse_point";
+        if (current.Length != file.LengthBytes
+            || current.LastWriteTimeUtc != file.LastWriteUtc.UtcDateTime)
+            return "changed";
+        try
+        {
+            using var probe = new FileStream(file.CanonicalPath, FileMode.Open,
+                FileAccess.ReadWrite, FileShare.None, 1);
+        }
+        catch (IOException) { return "locked"; }
+        catch (UnauthorizedAccessException) { return "elevation_required"; }
+        return "eligible";
+    }
+
+    private DispatchResult Commit(JsonElement? p)
+    {
+        var (req, err) = Parse<CommitCleanupRequest>(p);
+        if (err is not null) return err;
+        if (!_scans.TryGet(req!.SessionId, out var s))
+            return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "unknown session");
+        if (_executor is null)
+            return DispatchResult.Fail(Protocol.Errors.CleanupNotEnabled,
+                "cleanup executor not configured");
+        if (req.CandidateIds is null || req.CandidateIds.Count == 0)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "candidateIds required");
+
+        // Session freshness, same gate as preview — a stale snapshot can never
+        // be resurrected by holding a previously-granted approval.
+        if (_executor.SessionTtl is { } ttl
+            && DateTimeOffset.UtcNow - s.CreatedUtc > ttl)
+            return DispatchResult.Fail(Protocol.Errors.SessionExpired,
+                "session expired — rescan required");
+
+        // Approval enforcement: commit may only cover candidates that passed
+        // cleanup.preview in this session while the grant is still fresh.
+        // This is the authoritative gate — never delegated to the client.
+        ApprovalGrant? grant;
+        lock (s.Items) grant = s.Approval;
+        if (grant is null)
+            return DispatchResult.Fail(Protocol.Errors.ApprovalRequired,
+                "cleanup.preview approval required before commit");
+        if (_executor.ApprovalTtl is { } attl
+            && DateTimeOffset.UtcNow - grant.GrantedUtc > attl)
+            return DispatchResult.Fail(Protocol.Errors.ApprovalStale,
+                "approval is stale — run cleanup.preview again");
+        var distinct = req.CandidateIds.Distinct().ToArray();
+        if (distinct.Any(id => !grant.CandidateIds.Contains(id)))
+            return DispatchResult.Fail(Protocol.Errors.ApprovalMismatch,
+                "commit includes candidates outside the previewed approval");
+
+        var resolved = _scans.ResolveCandidates(s, distinct);
+        if (resolved.Count != distinct.Length)
+            return DispatchResult.Fail(Protocol.Errors.CandidateNotFound, "one or more candidateIds not in session");
+
+        // Measured free-space delta on the quarantine volume: informational
+        // only — same-volume quarantine moves are not expected to free space.
+        long? before = FreeSpaceBytes(_executor.QuarantineRoot);
+        var items = _executor.Commit(s.Id, distinct, s.Cancellation.Token);
+        long? after = FreeSpaceBytes(_executor.QuarantineRoot);
+        long? delta = before is null || after is null ? null : after - before;
+
+        return DispatchResult.Ok(new CleanupCommitResponse(
+            s.Id, distinct.Length, items.Count(i => i.Status != "rejected"),
+            s.Cancellation.IsCancellationRequested,
+            items, delta));
+    }
+
+    private static long? FreeSpaceBytes(string quarantineRoot)
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(quarantineRoot));
+            return root is null ? null : new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch { return null; }
+    }
+
+    private DispatchResult Restore(JsonElement? p)
+    {
+        if (_executor is null)
+            return DispatchResult.Fail(Protocol.Errors.CleanupNotEnabled,
+                "cleanup executor not configured");
+        var (req, err) = Parse<RestoreRequest>(p);
+        if (err is not null) return err;
+        if (req!.OperationIds is null || req.OperationIds.Count == 0)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "operationIds required");
+
+        var items = req.OperationIds.Select(id => _executor.Restore(id)).ToArray();
+        return DispatchResult.Ok(new { items });
+    }
+
+    private DispatchResult GetCleanupHistory(JsonElement? p)
+    {
+        if (_journal is null) return DispatchResult.Ok(new HistoryResponse(Array.Empty<JournalEntryDto>()));
+        // Bounded pagination for reconciliation workflows — read-only, capped
+        // per page; the UI keeps using the defaults and sees no change.
+        string? state = null, sessionId = null;
+        int limit = 500, offset = 0;
+        if (p is { ValueKind: JsonValueKind.Object } obj)
+        {
+            if (obj.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.String)
+                state = st.GetString();
+            if (obj.TryGetProperty("sessionId", out var si) && si.ValueKind == JsonValueKind.String)
+                sessionId = si.GetString();
+            if (obj.TryGetProperty("limit", out var l)) l.TryGetInt32(out limit);
+            if (obj.TryGetProperty("offset", out var o)) o.TryGetInt32(out offset);
+        }
+        limit = Math.Clamp(limit, 1, 1000);
+        offset = Math.Max(0, offset);
+        var entries = _journal.Query(state, limit, offset, sessionId).Select(e => new JournalEntryDto(
+            e.OperationId, e.SessionId, e.CandidateId, e.Category, e.FileLength,
+            e.State.ToString().ToLowerInvariant(), e.ErrorCode, e.DisplayName,
+            e.UpdatedUtc.ToString("O"), e.IntegrityState)).ToArray();
+        return DispatchResult.Ok(new
+        {
+            entries,
+            total = _journal.Count(state, sessionId),
+        });
+    }
+
+    private DispatchResult GetStatus(JsonElement? p)
+    {
+        var sessionId = ParamSessionId(p);
+        if (sessionId is null) return DispatchResult.Fail(Protocol.Errors.InvalidParams, "sessionId required");
+        if (!_scans.TryGet(sessionId, out var s)) return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "unknown session");
+        int count; long bytes; SessionStatus status;
+        lock (s.Items) { count = s.Items.Count; bytes = s.Items.Sum(i => i.File.LengthBytes); status = s.Status; }
+        // Surface expiry so action UIs can drop stale references — commit would
+        // reject them anyway, but the status check lets the UI fail earlier.
+        var expired = _executor?.SessionTtl is { } ttl
+                      && DateTimeOffset.UtcNow - s.CreatedUtc > ttl;
+        return DispatchResult.Ok(new ScanSessionInfo(s.Id,
+            expired ? "expired" : status.ToString().ToLowerInvariant(), count, bytes));
+    }
+
+    private static string? ParamSessionId(JsonElement? p)
+    {
+        if (p is not { ValueKind: JsonValueKind.Object }) return null;
+        return p.Value.TryGetProperty("sessionId", out var el) && el.ValueKind == JsonValueKind.String
+            ? el.GetString() : null;
+    }
+
+    // --- M3 features ---
+
+    private DispatchResult DuplicatesStart(JsonElement? p)
+    {
+        if (_dupes is null || _scopes is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "duplicates module not configured");
+        var (req, err) = Parse<DuplicatesStartRequest>(p);
+        if (err is not null) return err;
+        if (req!.ScopeIds is null || req.ScopeIds.Count == 0)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "scopeIds required");
+        var bad = req.ScopeIds.Where(id => _scopes.Resolve(id) is null).ToArray();
+        if (bad.Length > 0)
+            return DispatchResult.Fail(Protocol.Errors.ScopeNotAllowed,
+                $"unknown or unavailable scopes: {string.Join(',', bad)}");
+
+        ScanSession session;
+        try { session = _scans.CreateExternal(); }
+        catch (SessionCapacityException ex)
+        {
+            return DispatchResult.Fail(Protocol.Errors.SessionCapacity, ex.Message);
+        }
+        var sid = session.Id;
+        Task.Run(() =>
+        {
+            try
+            {
+                var report = _dupes.ScanIntoSession(session, req.ScopeIds, session.Cancellation.Token);
+                lock (_dupeReports) _dupeReports[sid] = report;
+                session.Status = session.Cancellation.IsCancellationRequested
+                    ? ClearForge.Engine.Scanning.SessionStatus.Cancelled
+                    : ClearForge.Engine.Scanning.SessionStatus.Completed;
+            }
+            catch (OperationCanceledException)
+            {
+                session.Status = ClearForge.Engine.Scanning.SessionStatus.Cancelled;
+            }
+            catch (Exception ex)
+            {
+                session.LastError = ex.GetType().Name;
+                session.Status = ClearForge.Engine.Scanning.SessionStatus.Failed;
+            }
+        });
+        return DispatchResult.Ok(new ScanSessionInfo(sid, "scanning", 0, 0));
+    }
+
+    private DispatchResult DuplicatesGroups(JsonElement? p)
+    {
+        var sessionId = ParamSessionId(p);
+        if (sessionId is null) return DispatchResult.Fail(Protocol.Errors.InvalidParams, "sessionId required");
+        // Reports are bounded by session lifetime: once the session store has
+        // evicted a session its report is dead weight — prune on access.
+        lock (_dupeReports)
+        {
+            foreach (var key in _dupeReports.Keys
+                         .Where(k => !_scans.TryGet(k, out _)).ToArray())
+                _dupeReports.Remove(key);
+        }
+        ClearForge.Engine.Duplicates.DuplicateReport? report;
+        lock (_dupeReports) _dupeReports.TryGetValue(sessionId, out report);
+        if (report is null) return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "no duplicate report for session");
+        return DispatchResult.Ok(new DuplicatesGroupsResponse(
+            report.SessionId,
+            report.Groups.Select(g => new DuplicateGroupDto(
+                g.GroupId, g.Sha256Short, g.FileBytes, g.Copies,
+                g.Candidates.Select(c => c.Id).ToArray())).ToArray(),
+            report.EstimatedRecoverableBytes));
+    }
+
+    private DispatchResult StartupList()
+    {
+        if (_startup is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "startup module not configured");
+        var entries = _startup.Enumerate().Select(e => new StartupEntryDto(
+            e.Name, e.Source, e.Target, e.Publisher, e.Status, e.Confidence,
+            Modifiable: false)).ToArray();
+        return DispatchResult.Ok(new StartupListResponse(entries,
+            "Read-only inventory. Modify entries via Windows Settings > Apps > Startup."));
+    }
+
+    private DispatchResult PrivacyScanCache(JsonElement? p)
+    {
+        if (_cacheScan is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "privacy cache scan not configured");
+        ScanSession session;
+        try { session = _scans.CreateExternal(); }
+        catch (SessionCapacityException ex)
+        {
+            return DispatchResult.Fail(Protocol.Errors.SessionCapacity, ex.Message);
+        }
+        var sid = session.Id;
+        Task.Run(() =>
+        {
+            try
+            {
+                _cacheScan.ScanIntoSession(session, session.Cancellation.Token);
+                session.Status = session.Cancellation.IsCancellationRequested
+                    ? SessionStatus.Cancelled : SessionStatus.Completed;
+            }
+            catch (OperationCanceledException) { session.Status = SessionStatus.Cancelled; }
+            catch (Exception ex)
+            {
+                session.LastError = ex.GetType().Name;
+                session.Status = SessionStatus.Failed;
+            }
+        });
+        return DispatchResult.Ok(new ScanSessionInfo(sid, "scanning", 0, 0));
+    }
+
+    private DispatchResult PrivacyDetect()
+    {
+        if (_privacy is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "privacy module not configured");
+        var profiles = _privacy.Detect().Select(pr => new BrowserProfileDto(
+            pr.Browser, pr.ProfileName, pr.BrowserRunning, pr.CacheBytes,
+            pr.Categories.ToDictionary(kv => kv.Key, kv => new PrivacyCategoryDto(
+                kv.Value.Id, kv.Value.Available, kv.Value.Warning,
+                kv.Value.UnavailableReason)))).ToArray();
+        return DispatchResult.Ok(new PrivacyDetectResponse(profiles));
+    }
+
+    // --- M4 Smart Storage (read-only surface; executable recs are session-bound) ---
+
+    private readonly ClearForge.Engine.Storage.StorageInventory? _inventory;
+    private readonly ClearForge.Engine.Storage.RecommendationActionBridge? _actionBridge;
+    private ClearForge.Engine.Storage.StorageInventoryReport? _lastInventory;
+    private int _inventoryGeneration;
+    private int _recommendationGeneration = -1;
+    private IReadOnlyList<ClearForge.Engine.Storage.Recommendation>? _mergedRecommendations;
+    private readonly object _recsLock = new();
+
+    private ClearForge.Engine.Storage.StorageInventory RequireInventory()
+        => _inventory ?? throw new InvalidOperationException("storage module not configured");
+
+    /// <summary>
+    /// The last observed inventory; a fresh scan bumps the generation so the
+    /// next recommend rebuilds action sessions instead of reusing stale ones.
+    /// </summary>
+    private ClearForge.Engine.Storage.StorageInventoryReport CurrentInventory()
+    {
+        if (_lastInventory is null)
+        {
+            _lastInventory = RequireInventory().Scan(
+                _scopes?.All.Keys.ToArray() ?? Array.Empty<string>(), CancellationToken.None);
+            _inventoryGeneration++;
+        }
+        return _lastInventory;
+    }
+
+    /// <summary>
+    /// Inventory-derived (review-only) plus session-bound executable
+    /// recommendations, cached per inventory generation. One action session
+    /// per category per generation — repeated recommend/plan calls never
+    /// duplicate registrations.
+    /// </summary>
+    private IReadOnlyList<ClearForge.Engine.Storage.Recommendation> MergedRecommendations()
+    {
+        // Serialized: concurrent recommend calls must never double-register
+        // action sessions for the same generation.
+        lock (_recsLock)
+        {
+            if (_mergedRecommendations is not null && _recommendationGeneration == _inventoryGeneration)
+                return _mergedRecommendations;
+            var merged = ClearForge.Engine.Storage.RecommendationEngine.FromInventory(CurrentInventory())
+                .Concat(_actionBridge?.Build() ?? Enumerable.Empty<ClearForge.Engine.Storage.Recommendation>())
+                .OrderByDescending(r => r.Score)
+                .ThenBy(r => r.Id, StringComparer.Ordinal)
+                .ToArray();
+            _mergedRecommendations = merged;
+            _recommendationGeneration = _inventoryGeneration;
+            return merged;
+        }
+    }
+
+    private DispatchResult StorageInventory(JsonElement? p)
+    {
+        if (_inventory is null) return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "storage module not configured");
+        var scopeIds = _scopes?.All.Keys.ToArray() ?? Array.Empty<string>();
+        var r = _inventory.Scan(scopeIds, CancellationToken.None);
+        lock (_recsLock)
+        {
+            _lastInventory = r;
+            _inventoryGeneration++; // fresh evidence invalidates bound action sessions
+        }
+        return DispatchResult.Ok(new
+        {
+            totalLogicalBytes = r.TotalLogicalBytes,
+            partial = r.Partial,
+            scopes = r.Scopes.ToDictionary(kv => kv.Key, kv => kv.Value.Select(n => new
+            {
+                name = n.Name, kind = n.Kind,
+                logicalBytes = n.LogicalBytes, categoryHint = n.CategoryHint,
+            }).ToArray()),
+        });
+    }
+
+    private DispatchResult StorageRecommend(JsonElement? p)
+    {
+        if (_inventory is null) return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "storage module not configured");
+        var recs = MergedRecommendations();
+        return DispatchResult.Ok(new { recommendations = recs.Select(r => new
+        {
+            r.Id, r.Category, r.Title, r.Explanation, r.Evidence,
+            r.EstimatedLogicalBytes,
+            confidence = r.Confidence.ToString().ToLowerInvariant(),
+            risk = r.Risk.ToString().ToLowerInvariant(),
+            reversibility = r.Reversibility.ToString().ToLowerInvariant(),
+            r.Preconditions, r.SkipReasons, r.ActionRef,
+            action = r.Action is null ? null : new
+            {
+                r.Action.Kind, r.Action.SessionId, r.Action.Status,
+                r.Action.CandidateCount, r.Action.EligibleBytes,
+            },
+        }).ToArray() });
+    }
+
+    private DispatchResult StoragePlan(JsonElement? p)
+    {
+        long goal = 0;
+        if (p is { ValueKind: JsonValueKind.Object } obj
+            && obj.TryGetProperty("goalBytes", out var g))
+            g.TryGetInt64(out goal);
+        if (goal <= 0) return DispatchResult.Fail(Protocol.Errors.InvalidParams, "goalBytes must be > 0");
+        if (_inventory is null) return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "storage module not configured");
+        var recs = MergedRecommendations();
+        var constraints = ParsePlanConstraints(p);
+        var plan = ClearForge.Engine.Storage.RecommendationEngine.Plan(goal, recs, constraints);
+        return DispatchResult.Ok(new
+        {
+            goalBytes = plan.GoalBytes,
+            estimatedTotalBytes = plan.EstimatedTotalBytes,
+            likelyAchievable = plan.LikelyAchievable,
+            selected = plan.Selected.Select(r => new
+            {
+                r.Id, r.Title, r.Explanation, r.Evidence, r.EstimatedLogicalBytes,
+                confidence = r.Confidence.ToString().ToLowerInvariant(),
+                risk = r.Risk.ToString().ToLowerInvariant(),
+                reversibility = r.Reversibility.ToString().ToLowerInvariant(),
+                r.ActionRef,
+                action = r.Action is null ? null : new
+                {
+                    r.Action.Kind, r.Action.SessionId, r.Action.Status,
+                    r.Action.CandidateCount, r.Action.EligibleBytes,
+                },
+            }).ToArray(),
+            skipped = plan.Skipped.Select(s => new { s.Id, s.Title, s.Reason }).ToArray(),
+            plan.Explanations, plan.MissingEvidence,
+        });
+    }
+
+    /// <summary>
+    /// Optional user constraints for planning: rejected recommendation IDs and
+    /// excluded categories/scopes. All fields optional and additive — they
+    /// only narrow what the deterministic planner may select.
+    /// </summary>
+    private static ClearForge.Engine.Storage.PlanConstraints? ParsePlanConstraints(JsonElement? p)
+    {
+        if (p is not { ValueKind: JsonValueKind.Object } obj
+            || !obj.TryGetProperty("constraints", out var c)
+            || c.ValueKind != JsonValueKind.Object)
+            return null;
+        return new ClearForge.Engine.Storage.PlanConstraints(
+            StringList(c, "excludeIds"),
+            StringList(c, "excludeCategories"),
+            StringList(c, "excludeScopes"));
+    }
+
+    private static IReadOnlyCollection<string>? StringList(JsonElement obj, string name)
+    {
+        if (!obj.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Array)
+            return null;
+        return el.EnumerateArray()
+            .Where(e => e.ValueKind == JsonValueKind.String)
+            .Select(e => e.GetString()!).ToArray();
+    }
+
+    private static (T? Req, DispatchResult? Err) Parse<T>(JsonElement? p)
+    {
+        if (p is not { ValueKind: JsonValueKind.Object })
+            return (default, DispatchResult.Fail(Protocol.Errors.InvalidParams, "params object required"));
+        try { return (p.Value.Deserialize<T>(ParamsJson), null); }
+        catch (JsonException) { return (default, DispatchResult.Fail(Protocol.Errors.InvalidParams, "bad params")); }
+    }
+
+    // --- M7.2 curated model catalogue + secure install lifecycle ---
+
+    private readonly ClearForge.Models.ModelManager? _models;
+
+    /// <summary>Stable wire shape for a model's live lifecycle state.</summary>
+    private static object StateDto(ClearForge.Models.ModelManager.ModelState s) => new
+    {
+        modelId = s.ModelId,
+        state = s.State,
+        installedBytes = s.InstalledBytes,
+        downloadedBytes = s.DownloadedBytes,
+        totalBytes = s.TotalBytes,
+        error = s.Error,
+    };
+
+    private DispatchResult ModelsCatalog()
+    {
+        if (_models is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "models module not configured");
+        var states = _models.Status().ToDictionary(s => s.ModelId, StringComparer.Ordinal);
+        return DispatchResult.Ok(new
+        {
+            catalogVersion = _models.Catalog.Version,
+            models = _models.Catalog.Models.Select(m => new
+            {
+                m.Id, m.DisplayName, m.Publisher, m.Repository,
+                m.UpstreamRepository, m.Revision,
+                artifact = new
+                {
+                    m.Artifact.FileName, m.Artifact.SizeBytes,
+                    m.Artifact.Format, m.Artifact.Sha256,
+                },
+                license = new { m.License.Id, m.License.Url },
+                runtime = new
+                {
+                    m.Runtime.Backend, m.Runtime.Acceleration,
+                    m.Runtime.Architectures,
+                },
+                requirements = new
+                {
+                    m.Requirements.MinRamBytesEstimate,
+                    m.Requirements.MinFreeStorageBytesEstimate,
+                    estimatesAreApproximate = true,
+                },
+                supportStatus = m.SupportStatus,
+                qualityNotes = m.QualityNotes,
+                state = states.TryGetValue(m.Id, out var s) ? StateDto(s) : null,
+            }).ToArray(),
+        });
+    }
+
+    private DispatchResult ModelsStatus()
+    {
+        if (_models is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "models module not configured");
+        return DispatchResult.Ok(new
+        {
+            models = _models.Status().Select(StateDto).ToArray(),
+        });
+    }
+
+    private static string? ParamModelId(JsonElement? p)
+    {
+        if (p is not { ValueKind: JsonValueKind.Object }) return null;
+        return p.Value.TryGetProperty("modelId", out var el)
+            && el.ValueKind == JsonValueKind.String ? el.GetString() : null;
+    }
+
+    private DispatchResult ModelsInstall(JsonElement? p)
+    {
+        if (_models is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "models module not configured");
+        var id = ParamModelId(p);
+        if (id is null)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "modelId required");
+        try { return DispatchResult.Ok(StateDto(_models.BeginInstall(id))); }
+        catch (ClearForge.Models.ModelException ex)
+        {
+            return DispatchResult.Fail(ex.Code, ex.Message);
+        }
+    }
+
+    private DispatchResult ModelsCancel(JsonElement? p)
+    {
+        if (_models is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "models module not configured");
+        var id = ParamModelId(p);
+        if (id is null)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "modelId required");
+        return DispatchResult.Ok(new { modelId = id, cancelled = _models.Cancel(id) });
+    }
+
+    private DispatchResult ModelsRemove(JsonElement? p)
+    {
+        if (_models is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "models module not configured");
+        var id = ParamModelId(p);
+        if (id is null)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "modelId required");
+        try { return DispatchResult.Ok(StateDto(_models.Remove(id))); }
+        catch (ClearForge.Models.ModelException ex)
+        {
+            return DispatchResult.Fail(ex.Code, ex.Message);
+        }
+    }
+
+    // --- M8.1 unified smart scan ---
+
+    private static string? ParamSmartScanId(JsonElement? p)
+    {
+        if (p is not { ValueKind: JsonValueKind.Object }) return null;
+        return p.Value.TryGetProperty("smartScanId", out var el)
+               && el.ValueKind == JsonValueKind.String ? el.GetString() : null;
+    }
+
+    /// <summary>
+    /// Live executability of a finding's backing session at ANSWER time —
+    /// not a stored snapshot: "missing" (evicted), "expired" (past
+    /// SessionTtl), "cancelled" (latched cancellation → commits would
+    /// report cancelled per item), else "live". Null for findings with no
+    /// binding. The engine still re-enforces every gate at preview/commit;
+    /// this lets the UI stop offering actions that can only fail.
+    /// </summary>
+    private string? FindingSessionState(ClearForge.Engine.SmartScan.SmartFinding f)
+    {
+        if (f.SessionId is null) return null;
+        if (!_scans.TryGet(f.SessionId, out var child)) return "missing";
+        if (_executor?.SessionTtl is { } ttl
+            && DateTimeOffset.UtcNow - child.CreatedUtc > ttl) return "expired";
+        if (child.Status is SessionStatus.Failed or SessionStatus.Cancelled
+            || child.Cancellation.IsCancellationRequested) return "cancelled";
+        return "live";
+    }
+
+    private object SmartScanStatusDto(ClearForge.Engine.SmartScan.SmartScanSession s)
+    {
+        lock (s.Sync)
+            return new
+            {
+                smartScanId = s.Id,
+                status = s.Status.ToString().ToLowerInvariant(),
+                userCancelled = s.UserCancelled,
+                producers = s.Producers.Select(p => new
+                {
+                    producerId = p.ProducerId,
+                    status = p.Status.ToString().ToLowerInvariant(),
+                    findings = p.Findings,
+                    diagnostic = p.Diagnostic,
+                }).ToArray(),
+                findingCount = s.Findings.Count,
+                actionableCount = s.Findings.Count(f => f.Actionable),
+                deduplicated = s.DeduplicatedCount,
+                estimatedLogicalBytes = s.Findings.Where(f => f.Actionable)
+                    .Sum(f => f.EstimatedLogicalBytes),
+            };
+    }
+
+    private DispatchResult SmartScanStart(JsonElement? p)
+    {
+        if (_smartScan is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "smart scan not configured");
+        // Optional explicit scope narrowing; default = every configured scope.
+        IReadOnlyList<string> scopeIds = _scopes?.All.Keys.ToArray()
+            ?? Array.Empty<string>();
+        if (p is { ValueKind: JsonValueKind.Object } obj
+            && obj.TryGetProperty("scopeIds", out var sids)
+            && sids.ValueKind == JsonValueKind.Array)
+        {
+            var asked = sids.EnumerateArray()
+                .Where(e => e.ValueKind == JsonValueKind.String)
+                .Select(e => e.GetString()!).ToArray();
+            var bad = asked.Where(id => _scopes?.Resolve(id) is null).ToArray();
+            if (bad.Length > 0)
+                return DispatchResult.Fail(Protocol.Errors.ScopeNotAllowed,
+                    $"unknown or unavailable scopes: {string.Join(',', bad)}");
+            scopeIds = asked;
+        }
+        try
+        {
+            var s = _smartScan.Start(scopeIds);
+            return DispatchResult.Ok(new { smartScanId = s.Id, status = "running" });
+        }
+        catch (SessionCapacityException ex)
+        {
+            return DispatchResult.Fail(Protocol.Errors.SessionCapacity, ex.Message);
+        }
+    }
+
+    private DispatchResult SmartScanStatusResult(JsonElement? p)
+    {
+        if (_smartScan is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "smart scan not configured");
+        var id = ParamSmartScanId(p);
+        if (id is null || !_smartScan.Store.TryGet(id, out var s))
+            return DispatchResult.Fail(Protocol.Errors.SessionNotFound,
+                "unknown smart scan");
+        return DispatchResult.Ok(SmartScanStatusDto(s));
+    }
+
+    private DispatchResult SmartScanResults(JsonElement? p)
+    {
+        if (_smartScan is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "smart scan not configured");
+        var id = ParamSmartScanId(p);
+        if (id is null || !_smartScan.Store.TryGet(id, out var s))
+            return DispatchResult.Fail(Protocol.Errors.SessionNotFound,
+                "unknown smart scan");
+        lock (s.Sync)
+            return DispatchResult.Ok(new
+            {
+                smartScanId = s.Id,
+                status = s.Status.ToString().ToLowerInvariant(),
+                userCancelled = s.UserCancelled,
+                producers = s.Producers.Select(p => new
+                {
+                    producerId = p.ProducerId,
+                    status = p.Status.ToString().ToLowerInvariant(),
+                    findings = p.Findings,
+                    diagnostic = p.Diagnostic,
+                }).ToArray(),
+                findings = s.Findings.Select(f => new
+                {
+                    f.Id, f.Producer, f.Category, f.Title, f.Reason,
+                    f.Evidence, f.Confidence,
+                    risk = f.Risk.ToString().ToLowerInvariant(),
+                    f.EstimatedLogicalBytes, f.Reversibility,
+                    f.Actionable, f.SkipReason, f.SessionId, f.CandidateIds,
+                    f.DuplicateOf,
+                    sessionState = FindingSessionState(f),
+                }).ToArray(),
+                deduplicated = s.DeduplicatedCount,
+                // Logical estimate only — quarantined bytes are NOT freed space.
+                estimatedLogicalBytes = s.Findings.Where(f => f.Actionable)
+                    .Sum(f => f.EstimatedLogicalBytes),
+            });
+    }
+
+    private DispatchResult SmartScanCancel(JsonElement? p)
+    {
+        if (_smartScan is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused,
+                "smart scan not configured");
+        var id = ParamSmartScanId(p);
+        if (id is null)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams,
+                "smartScanId required");
+        return _smartScan.Store.Cancel(id)
+            ? DispatchResult.Ok(new { smartScanId = id, status = "cancelling" })
+            : DispatchResult.Fail(Protocol.Errors.SessionNotFound,
+                "unknown smart scan");
+    }
+}

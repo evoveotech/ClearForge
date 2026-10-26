@@ -1,0 +1,14 @@
+# Default exclusions — always applied, in addition to per-rule limits.
+# Patterns are matched case-insensitively against canonical paths.
+version: 1
+never_touch_subtrees:
+  - C:\Windows
+  - C:\Program Files
+  - C:\Program Files (x86)
+  - C:\ProgramData\Microsoft\Windows Defender
+never_touch_names:
+  - "*.lnk"           # shortcuts encode user state, not junk
+categories_forbidden:
+  - registry          # permanently out of scope (see docs/cleanup-policy.md)
+  - credentials       # browser/OS credential stores
+  - browser-sessions  # auth state

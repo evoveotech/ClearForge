@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ClearForge.Ai</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClearForge.Contracts\ClearForge.Contracts.csproj" />
+    <PackageReference Include="LLamaSharp" Version="0.30.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.30.0" />
+  </ItemGroup>
+
+  <!-- The backend package deploys natives under runtimes/<rid>/native/<avx*>,
+       but .NET's default resolver cannot find them there (empty
+       runtimeTargets) and subdirectory layout breaks dependent-DLL search.
+       Copy the AVX2 variant flat next to the exe: name-based P/Invoke and
+       sibling dependency resolution then both work deterministically. -->
+  <Target Name="CopyLlamaNatives" AfterTargets="Build">
+    <ItemGroup>
+      <LlamaNative Include="$(OutDir)runtimes\win-x64\native\avx2\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(LlamaNative)" DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

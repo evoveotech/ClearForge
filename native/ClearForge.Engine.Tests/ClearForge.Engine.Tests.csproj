@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClearForge.Contracts\ClearForge.Contracts.csproj" />
+    <ProjectReference Include="..\ClearForge.Engine\ClearForge.Engine.csproj" />
+    <ProjectReference Include="..\ClearForge.Models\ClearForge.Models.csproj" />
+    <ProjectReference Include="..\ClearForge.Windows\ClearForge.Windows.csproj" />
+    <ProjectReference Include="..\ClearForge.Host\ClearForge.Host.csproj" />
+    <ProjectReference Include="..\ClearForge.Ai\ClearForge.Ai.csproj" />
+  </ItemGroup>
+
+</Project>

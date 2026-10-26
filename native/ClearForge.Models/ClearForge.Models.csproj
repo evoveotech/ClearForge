@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- The catalogue is application-bundled and versioned; it is data, never
+       executable content. Remote catalogue updates are intentionally out of
+       scope until a signing trust model exists. -->
+  <ItemGroup>
+    <EmbeddedResource Include="catalog.json" />
+  </ItemGroup>
+
+</Project>
