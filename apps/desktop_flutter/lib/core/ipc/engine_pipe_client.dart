@@ -213,22 +213,59 @@ class EngineClient {
 
 /// Locates and launches the engine host process.
 class EngineProcess {
-  static String defaultExePath() {
-    var dir = File(Platform.resolvedExecutable).parent;
+  /// Ordered candidate locations for `ClearForge.Host.exe`, most to least
+  /// specific: the packaged layout beside the app first (the installer's
+  /// contract), then each ancestor's dev-tree build output — Release before
+  /// Debug at every level so a packaged-style run never silently picks a
+  /// stale debug binary when both exist.
+  static List<String> enginePathCandidates(String appDir) {
+    final candidates = <String>[
+      '$appDir\\engine\\ClearForge.Host.exe',
+      '$appDir\\ClearForge.Host.exe',
+    ];
+    var dir = Directory(appDir);
     for (var i = 0; i < 8; i++) {
-      final candidate = File(
-          '${dir.path}\\native\\ClearForge.Host\\bin\\Debug\\net8.0\\ClearForge.Host.exe');
-      if (candidate.existsSync()) return candidate.path;
+      for (final config in const ['Release', 'Debug']) {
+        candidates.add(
+            '${dir.path}\\native\\ClearForge.Host\\bin\\$config\\net8.0\\ClearForge.Host.exe');
+      }
       dir = dir.parent;
+    }
+    return candidates;
+  }
+
+  /// Resolves the engine path: explicit override → `CLEARFORGE_ENGINE_PATH`
+  /// environment variable → first existing candidate. An explicitly supplied
+  /// path (argument or env) is trusted as-is so its failure is diagnosable;
+  /// discovery candidates are existence-checked.
+  static String resolveEnginePath({
+    String? exePath,
+    String? envPath,
+    String? appDir,
+    bool Function(String path)? exists,
+  }) {
+    if (exePath != null && exePath.isNotEmpty) return exePath;
+    final env = envPath ??
+        Platform.environment['CLEARFORGE_ENGINE_PATH'];
+    if (env != null && env.isNotEmpty) return env;
+    final check = exists ?? (String p) => File(p).existsSync();
+    final base =
+        appDir ?? File(Platform.resolvedExecutable).parent.path;
+    for (final candidate in enginePathCandidates(base)) {
+      if (check(candidate)) return candidate;
     }
     return '';
   }
 
+  static String defaultExePath() => resolveEnginePath();
+
   static Future<Process> spawn({String? exePath, String? pipeName}) {
     final path = exePath ?? defaultExePath();
     if (path.isEmpty) {
-      throw StateError('ClearForge.Host.exe not found; build the engine first '
-          '(dotnet build native/ClearForge.sln).');
+      throw StateError('ClearForge.Host.exe not found. Expected it beside the '
+          'app (engine\\ClearForge.Host.exe), at a native\\\\ClearForge.Host '
+          'dev build output, or via the CLEARFORGE_ENGINE_PATH environment '
+          'variable.');
     }
     return Process.start(path, [?pipeName],
         mode: ProcessStartMode.normal);
