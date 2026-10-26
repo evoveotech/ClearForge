@@ -18,7 +18,8 @@ Last updated: 2026-10-27 (post-M8.4b, HEAD ~`ff85847`).
 - [ ] Destructive-test scenarios on disposable VM snapshots (only local user-dir verified)
 - [ ] ARM64 CI lane + ARM64 build/test (x64 only today)
 - [x] Self-contained engine (`win-x64`) — zero .NET-runtime prerequisite
-- [ ] Upgrade / rollback validation (install-over-install not yet tested; file-replace path only)
+- [x] Upgrade validation: install-over-install verified (idempotent, 213 files); rollback = reinstall older package (no versioned rollback machinery — documented limitation)
+- [ ] Clean-machine install test (installer verified on dev machine only; a machine without the dev toolchain is still unverified)
 - [ ] Code-signed engine + UI binaries; signature verification test — **BLOCKED on signing identity**
 - [ ] Clean-machine install test (installer verified on dev machine only; a machine without the dev toolchain is still unverified)
 - [ ] Privacy policy + vulnerability-disclosure channel published
