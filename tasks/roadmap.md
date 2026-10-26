@@ -86,9 +86,10 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
   (packaged+env+Release/Debug order); un-red CI end-to-end (model gate
   `ModelGate`, engine builds in flutter/m44 lanes, portable live-pipe test,
   m44 same-volume TEMP fix, unique AI-worker pipe names); shipped M8.5
-  startup completeness (`31be6f4`). HEAD `31be6f4`, CI green on all three
-  lanes at `fa2806b`; M8.5 run pending. Local gates: 367/367 .NET,
-  70/70 flutter, analyze clean.
+  startup completeness (`31be6f4`); fixed a real `BeginInstall`
+  ready-vs-busy race in `ModelManager` surfaced by CI (`a04c8d0`). HEAD
+  `a04c8d0`. CI green on all three lanes at `fa2806b`; later runs pending.
+  Local gates: 367/367 .NET, 70/70 flutter, analyze clean.
 - Known open product gap: quarantine is same-volume-only — a user TEMP on a
   non-OS volume yields `cross_volume_refused` for that whole category
   (see risk register; per-volume quarantine roots are a design decision).
