@@ -64,6 +64,7 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
 
 | Risk | Severity | Owner | Status |
 |---|---|---|---|
+| Engine cold-start `transport_closed` on first health check (seen once on CI) | Med | hardening: retry/backoff on connect + host stderr capture for diagnosis | open — one-off flake, rerun green |
 | "ClearForge" name collides with two existing software companies (clearforgesoftware.com iOS apps; clearforge.dev consultancy) — same market class | High | REL-legal | **open — rename or formal clearance required** |
 | No installer → product cannot ship/run installed | High | REL-1/REL-2 | mitigated: portable ZIP + Inno installer verified; unsigned |
 | macOS entirely unbuilt and unverifiable on this host | High | MAC-1 | BLOCKED externally |
