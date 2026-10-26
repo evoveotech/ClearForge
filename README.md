@@ -41,7 +41,7 @@ Prereqs: .NET SDK per `global.json` (9.0.203, targets net8.0), Flutter stable wi
 
 | Platform | Status |
 |---|---|
-| Windows x64 | Development — portable ZIP builds and runs (unsigned); **not RELEASE-READY** |
+| Windows x64 | **Pre-release published** — `v0.1.0-m1` on Releases (unsigned preview); **not RELEASE-READY** |
 | macOS | **BLOCKED** — no verified macOS build or adapter |
 
 Release gates tracked in `docs/release-checklist.md`. No platform is

@@ -91,7 +91,10 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
   startup completeness (`31be6f4`); fixed a real `BeginInstall`
   ready-vs-busy race in `ModelManager` surfaced by CI (`a04c8d0`);
   shipped M8.4b engine `apps.leftovers` review-only matcher (`8846e1a`).
-  HEAD `ff85847`. CI green on all lanes at `9e05ca0`; UAT screenshots +
+  Pre-release **v0.1.0-m1 published** on GitHub (unsigned preview,
+  installer + zip + checksums) — user-directed; Windows GA still not
+  RELEASE-READY (signing, clean-machine, trademark open).
+  HEAD `90bf316`. CI green on all lanes at `9e05ca0`; UAT screenshots +
   README metrics (`83a2203`); UI overflow + live-pipe flake fixes; REL-2
   packaging (self-contained portable ZIP, clean-extract verified, Inno
   script, install docs). Local gates: 384/384 .NET, 71/71 flutter.

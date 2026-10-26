@@ -35,8 +35,9 @@ Last updated: 2026-10-27 (post-M8.4b + REL-2, HEAD ~`ea2af7d`).
 - [ ] Platform adapter implementation + verification
 - [ ] Signing + notarization
 
-## Publication gates — all open
+## Publication gates
 
-- [ ] `RELEASE-READY` requires every `[x]` above + clean-machine + installer validation
-- [ ] `SHIPPED` requires an authorized identity to sign and publish
+- [x] Pre-release `v0.1.0-m1` **published** on GitHub Releases (2026-10-27): unsigned installer + portable zip + SHA-256s, marked `prerelease` — a preview for testing, not a stable release
+- [ ] `RELEASE-READY` requires every `[x]` above + clean-machine + signed build
+- [ ] `SHIPPED` (stable) requires `RELEASE-READY` + an authorized identity to sign and publish
 - [x] No platform is labelled `SHIPPED` or `RELEASE-READY` prematurely — status labels used in `tasks/roadmap.md`
