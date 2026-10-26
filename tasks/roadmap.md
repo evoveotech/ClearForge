@@ -25,7 +25,7 @@ RELEASE-READY / SHIPPED / BLOCKED — never interchange.
 | M8.0.3 | Journal schema v2 + SHA-256 content integrity | DONE/VERIFIED | `M803Tests.cs`, `tasks/plan.md` |
 | M8.2 | Windows cleanup coverage (15 catalog rules) + evidence quality | DONE/VERIFIED | `M82Tests.cs`, `tasks/m82-plan.md` |
 | M8.3 | Duplicate review: keeper selection, group binding, fail-closed enforcement | DONE/VERIFIED | commit `3bac212`; 337+56 tests |
-| M8.3r | Disk explorer: treemap (Space Lens), large/old files, hardlink consolidation | TODO | roadmap in gap doc §M8.3; none found in source |
+| M8.3r | Disk explorer: treemap (Space Lens), large/old files, hardlink consolidation | TODO | roadmap in gap doc §M8.3; none found in source. Design note: large/old over Downloads/Documents/Desktop requires those dirs as *trusted roots* (today they're only ScopeRegistry scan scopes) — expanding trusted-root surface is a deliberate decision, not a silent widening; candidate rule: `user-large-old-files` (size≥50MB AND age≥180d, review-only risk tier, named scopes only, depth bound) |
 | M8.4a | Application inventory (read-only) | DONE/VERIFIED | 355/355 + 61/61 tests; `apps.list` over HKLM64/32+HKCU |
 | M8.4b | Leftover mapping + guided uninstall (deep-link only, never auto-run) | TODO | dep M8.4a |
 | M8.5 | Startup completeness: HKLM Run/RunOnce, HKCU RunOnce, StartupApproved disabled-state | DONE/VERIFIED | 367/367 .NET tests; read-only; Scheduler/services → M8.5b |
@@ -85,8 +85,10 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
   shipped M8.4a `apps.list` (`663ef7d`); REL-1 `resolveEnginePath`
   (packaged+env+Release/Debug order); un-red CI end-to-end (model gate
   `ModelGate`, engine builds in flutter/m44 lanes, portable live-pipe test,
-  m44 same-volume TEMP fix, unique AI-worker pipe names). HEAD `fa2806b`,
-  CI green on all three lanes. Local gates: 355/355 .NET, 70/70 flutter.
+  m44 same-volume TEMP fix, unique AI-worker pipe names); shipped M8.5
+  startup completeness (`31be6f4`). HEAD `31be6f4`, CI green on all three
+  lanes at `fa2806b`; M8.5 run pending. Local gates: 367/367 .NET,
+  70/70 flutter, analyze clean.
 - Known open product gap: quarantine is same-volume-only — a user TEMP on a
   non-OS volume yields `cross_volume_refused` for that whole category
   (see risk register; per-volume quarantine roots are a design decision).
