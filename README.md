@@ -39,6 +39,14 @@ Prereqs: .NET SDK per `global.json` (9.0.203, targets net8.0), Flutter stable wi
 
 ## Status & evidence
 
+| Platform | Status |
+|---|---|
+| Windows x64 | Development — portable ZIP builds and runs (unsigned); **not RELEASE-READY** |
+| macOS | **BLOCKED** — no verified macOS build or adapter |
+
+Release gates tracked in `docs/release-checklist.md`. No platform is
+`RELEASE-READY` or `SHIPPED` today.
+
 Measured on the dev machine (2026-10-27), not marketing claims:
 
 - **454 automated tests green** — 384 .NET engine tests + 70 Flutter tests; `flutter analyze` clean; CI lanes dotnet / flutter / m44-GUI all green on main.

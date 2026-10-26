@@ -11,3 +11,5 @@ build/
 # OS/editor
 Thumbs.db
 *.log
+
+dist/

@@ -32,7 +32,7 @@ RELEASE-READY / SHIPPED / BLOCKED — never interchange.
 | M8.5b | Startup: Task Scheduler + services read-only, toggling (journaled) | TODO | dep M8.5 |
 | M9 | Extensions inventory (review-only), monitoring/tray, winget drift, browser history/cookies (lifecycle review gate), scheduling | TODO | gap doc §M9+ |
 | REL-1 | Engine discovery Debug-path-only → packaged layout + resolution order | DONE/VERIFIED | `resolveEnginePath`: exePath → env → packaged → Release/Debug walk-up; 9 tests |
-| REL-2 | Installer: MSIX/signed-installer ADR → build → upgrade/rollback/uninstall tests | TODO | `installer/` empty; `docs/release-checklist.md` |
+| REL-2 | Installer: MSIX/signed-installer ADR → build → upgrade/rollback/uninstall tests | PARTIAL | portable self-contained ZIP (`packaging/build-package.ps1`) reproducible + clean-extract verified; Inno script staged; signing BLOCKED on identity |
 | MAC-1 | macOS platform: runner, roots, fs identity, IPC transport, quarantine adapter | BLOCKED | no macOS hardware/toolchain on this machine; engineering + tests only, never claim release-ready |
 
 ## Platform capability matrix
@@ -89,8 +89,10 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
   startup completeness (`31be6f4`); fixed a real `BeginInstall`
   ready-vs-busy race in `ModelManager` surfaced by CI (`a04c8d0`);
   shipped M8.4b engine `apps.leftovers` review-only matcher (`8846e1a`).
-  HEAD `8846e1a`. CI green on all three lanes at `9e05ca0`; M8.4b run
-  pending. Local gates: 384/384 .NET, 70/70 flutter, analyze clean.
+  HEAD `ff85847`. CI green on all lanes at `9e05ca0`; UAT screenshots +
+  README metrics (`83a2203`); UI overflow + live-pipe flake fixes; REL-2
+  packaging (self-contained portable ZIP, clean-extract verified, Inno
+  script, install docs). Local gates: 384/384 .NET, 71/71 flutter.
 - Known open product gap: quarantine is same-volume-only — a user TEMP on a
   non-OS volume yields `cross_volume_refused` for that whole category
   (see risk register; per-volume quarantine roots are a design decision).
