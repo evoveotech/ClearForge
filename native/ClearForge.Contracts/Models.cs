@@ -177,6 +177,28 @@ public sealed record StartupListResponse(
     [property: JsonPropertyName("entries")] IReadOnlyList<StartupEntryDto> Entries,
     [property: JsonPropertyName("note")] string Note);
 
+// M8.4 read-only installed-application inventory.
+public sealed record AppEntryDto(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("publisher")] string? Publisher,
+    [property: JsonPropertyName("version")] string? Version,
+    [property: JsonPropertyName("installLocation")] string? InstallLocation,
+    [property: JsonPropertyName("sizeBytes")] long? SizeBytes,
+    [property: JsonPropertyName("installDate")] string? InstallDate,
+    // "registry-hklm-64" | "registry-hklm-32" | "registry-hkcu"
+    [property: JsonPropertyName("source")] string Source,
+    // "machine" | "current-user"
+    [property: JsonPropertyName("scope")] string Scope,
+    // "app" | "system-component" | "update"
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("hasUninstaller")] bool HasUninstaller,
+    // "registered" (uninstaller present) | "listed-only"
+    [property: JsonPropertyName("confidence")] string Confidence);
+
+public sealed record AppListResponse(
+    [property: JsonPropertyName("apps")] IReadOnlyList<AppEntryDto> Apps,
+    [property: JsonPropertyName("note")] string Note);
+
 public sealed record PrivacyCategoryDto(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("available")] bool Available,

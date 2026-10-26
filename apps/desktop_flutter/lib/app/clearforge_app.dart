@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/state/engine_controller.dart';
+import '../features/apps/apps_screen.dart';
 import '../features/cleaner/cleaner_screen.dart';
 import '../features/duplicates/duplicates_screen.dart';
 import '../features/history/history_screen.dart';
@@ -89,6 +90,9 @@ class _ClearForgeAppState extends State<ClearForgeApp> {
                           icon: Icon(Icons.rocket_launch_outlined),
                           label: Text('Startup')),
                       NavigationRailDestination(
+                          icon: Icon(Icons.apps_outlined),
+                          label: Text('Apps')),
+                      NavigationRailDestination(
                           icon: Icon(Icons.privacy_tip_outlined),
                           label: Text('Privacy')),
                       NavigationRailDestination(
@@ -107,8 +111,9 @@ class _ClearForgeAppState extends State<ClearForgeApp> {
                       2 => StorageScreen(controller: _controller),
                       3 => DuplicatesScreen(controller: _controller),
                       4 => StartupScreen(controller: _controller),
-                      5 => PrivacyScreen(controller: _controller),
-                      6 => ModelsScreen(controller: _controller),
+                      5 => AppsScreen(controller: _controller),
+                      6 => PrivacyScreen(controller: _controller),
+                      7 => ModelsScreen(controller: _controller),
                       _ => HistoryScreen(controller: _controller),
                     },
                   ),

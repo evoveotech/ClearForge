@@ -37,6 +37,7 @@ var scopes = new ClearForge.Engine.Duplicates.ScopeRegistry()
     .Add("desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
 var dupes = new ClearForge.Engine.Duplicates.DuplicateFinder(scopes);
 var startup = WindowsStartupInventory.CurrentUser();
+var apps = ClearForge.Windows.WindowsAppInventory.All();
 var privacy = new ClearForge.Engine.Privacy.BrowserPrivacyScanner(
     ClearForge.Engine.Privacy.BrowserPrivacyScanner.DefaultSpecs(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -70,7 +71,7 @@ var smartScan = new ClearForge.Engine.SmartScan.SmartScanCoordinator(
         new ClearForge.Engine.SmartScan.StorageReviewProducer(inventory),
     });
 
-var dispatcher = new RequestDispatcher(scans, executor, journal, dupes, scopes, startup, privacy, cacheScan, inventory, actionBridge, models, smartScan);
+var dispatcher = new RequestDispatcher(scans, executor, journal, dupes, scopes, startup, apps, privacy, cacheScan, inventory, actionBridge, models, smartScan);
 var pipeName = args.FirstOrDefault() ?? PipeServerHost.DefaultPipeName;
 
 await using var host = new PipeServerHost(dispatcher, pipeName);

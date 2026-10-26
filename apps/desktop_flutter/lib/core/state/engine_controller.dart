@@ -690,6 +690,30 @@ class EngineController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// M8.4 read-only installed-application inventory.
+  List<Map<String, dynamic>> apps = [];
+  String? appsNote;
+  bool appsLoading = false;
+
+  Future<void> loadApps() async {
+    if (_client == null || appsLoading) return;
+    appsLoading = true;
+    notifyListeners();
+    try {
+      final res = await _client!.call('apps.list');
+      if (res['error'] != null) {
+        errorMessage = res['error']['message'] as String?;
+      } else {
+        apps = (res['result']?['apps'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>();
+        appsNote = res['result']?['note'] as String?;
+      }
+    } finally {
+      appsLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Browser cache scan: produces a normal scan session — candidates flow
   /// through the shared preview/commit/quarantine pipeline.
   Future<void> startPrivacyCacheScan() async {

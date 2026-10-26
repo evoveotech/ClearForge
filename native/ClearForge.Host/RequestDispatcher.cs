@@ -26,6 +26,7 @@ public sealed class RequestDispatcher
     private readonly ClearForge.Engine.Cleanup.CleanupJournal? _journal;
     private readonly ClearForge.Engine.Duplicates.DuplicateFinder? _dupes;
     private readonly ClearForge.Engine.Startup.IStartupSource? _startup;
+    private readonly ClearForge.Engine.Apps.IAppInventorySource? _apps;
     private readonly ClearForge.Engine.Privacy.BrowserPrivacyScanner? _privacy;
     private readonly ClearForge.Engine.Privacy.BrowserCacheScanner? _cacheScan;
     private readonly ClearForge.Engine.Duplicates.ScopeRegistry? _scopes;
@@ -36,6 +37,7 @@ public sealed class RequestDispatcher
         ClearForge.Engine.Duplicates.DuplicateFinder? dupes = null,
         ClearForge.Engine.Duplicates.ScopeRegistry? scopes = null,
         ClearForge.Engine.Startup.IStartupSource? startup = null,
+        ClearForge.Engine.Apps.IAppInventorySource? apps = null,
         ClearForge.Engine.Privacy.BrowserPrivacyScanner? privacy = null,
         ClearForge.Engine.Privacy.BrowserCacheScanner? cacheScan = null,
         ClearForge.Engine.Storage.StorageInventory? inventory = null,
@@ -49,6 +51,7 @@ public sealed class RequestDispatcher
         _dupes = dupes;
         _scopes = scopes;
         _startup = startup;
+        _apps = apps;
         _privacy = privacy;
         _cacheScan = cacheScan;
         _inventory = inventory;
@@ -79,6 +82,7 @@ public sealed class RequestDispatcher
         Protocol.Methods.DuplicatesGroups => Task.FromResult(DuplicatesGroups(p)),
         Protocol.Methods.DuplicatesGroup => Task.FromResult(DuplicatesGroup(p)),
         Protocol.Methods.StartupList => Task.FromResult(StartupList()),
+        Protocol.Methods.AppsList => Task.FromResult(AppsList()),
         Protocol.Methods.PrivacyDetect => Task.FromResult(PrivacyDetect()),
         Protocol.Methods.PrivacyScanCache => Task.FromResult(PrivacyScanCache(p)),
         Protocol.Methods.StorageInventory => Task.FromResult(StorageInventory(p)),
@@ -610,6 +614,20 @@ public sealed class RequestDispatcher
             Modifiable: false)).ToArray();
         return DispatchResult.Ok(new StartupListResponse(entries,
             "Read-only inventory. Modify entries via Windows Settings > Apps > Startup."));
+    }
+
+    private DispatchResult AppsList()
+    {
+        if (_apps is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "apps module not configured");
+        var apps = _apps.Enumerate().Select(a => new AppEntryDto(
+            a.Name, a.Publisher, a.Version, a.InstallLocation, a.SizeBytes,
+            a.InstallDate, a.Source, a.Scope, a.Kind, a.HasUninstaller,
+            a.Confidence)).ToArray();
+        return DispatchResult.Ok(new AppListResponse(apps,
+            "Read-only inventory of registered applications. Classic desktop "
+            + "installers only — Store/Appx packages are not enumerated yet. "
+            + "Uninstall via Settings > Apps > Installed apps."));
     }
 
     private DispatchResult PrivacyScanCache(JsonElement? p)

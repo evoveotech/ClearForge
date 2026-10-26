@@ -149,6 +149,14 @@ per-candidate locks, idempotent commits), `Recovery` (startup reconcile,
 ambiguous → RecoveryRequired). See `docs/recovery.md` for the state machine.
 IPC additions: `cleanup.preview|commit|status|restore|cancel`, `history.get`.
 
+**M8.4 additions:** `ClearForge.Engine/Apps/AppInventory` — installed-app
+inventory built from raw uninstall-hive rows (`RawUninstallEntry`) produced
+by `ClearForge.Windows/WindowsAppInventory` (HKLM 64/32 + HKCU, read-only).
+Classification (app / system-component / update), size conversion and
+confidence live in the engine so fixtures exercise real semantics; per-source
+failure isolation via `CompositeAppInventory`. IPC addition: `apps.list`.
+No uninstall, reset, or leftover mutation in this milestone.
+
 ## Processes
 
 ```
@@ -171,7 +179,8 @@ ClearForge.Contracts — protocol constants, DTOs, error codes (shared vocab)
 ## Trust boundaries
 
 - UI holds **no canonical paths** — only opaque `sessionId:index` candidate IDs.
-- `cleanup.commit` exists end-to-end but returns `cleanup_not_enabled` (M1 gate).
+- `cleanup.commit` is fully enabled: it executes the approved exact-set through
+  journaled quarantine (preview → grant → revalidation → move → SHA-256 verify).
 - No elevated component exists yet. Elevation, when needed (P1+), is a separate
   helper spawned per session after a disclosed UAC prompt — never a service.
 

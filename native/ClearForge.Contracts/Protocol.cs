@@ -26,6 +26,8 @@ public static class Protocol
         // M8.3: read-only per-member group review for keeper selection.
         public const string DuplicatesGroup = "duplicates.group";
         public const string StartupList = "startup.list";
+        // M8.4: read-only installed-application inventory.
+        public const string AppsList = "apps.list";
         public const string PrivacyDetect = "privacy.detect";
         public const string PrivacyScanCache = "privacy.scanCache";
         public const string StorageInventory = "storage.inventory";
