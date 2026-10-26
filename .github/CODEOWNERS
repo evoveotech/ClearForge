@@ -1,0 +1,14 @@
+# Evoveo Tech owns all code — every change requires owner review.
+* @evoveotech
+
+# Safety-critical paths: always owner-reviewed.
+/native/ClearForge.Engine/Cleanup/ @evoveotech
+/native/ClearForge.Engine/SmartScan/ @evoveotech
+/native/ClearForge.Engine/Scanning/ @evoveotech
+/native/ClearForge.Host/ @evoveotech
+/native/ClearForge.Contracts/ @evoveotech
+/config/ @evoveotech
+/.github/ @evoveotech
+/LICENSE @evoveotech
+/NOTICE @evoveotech
+/CLA.md @evoveotech

@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet:
+    name: dotnet
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore + build + test engine
+        run: dotnet test native/ClearForge.sln --nologo
+
+  flutter:
+    name: flutter
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Dependencies
+        working-directory: apps/desktop_flutter
+        run: flutter pub get
+      - name: Analyze
+        working-directory: apps/desktop_flutter
+        run: flutter analyze
+      - name: Unit tests
+        working-directory: apps/desktop_flutter
+        run: flutter test
+      - name: Windows debug build
+        working-directory: apps/desktop_flutter
+        run: flutter build windows --debug
+
+  m44:
+    name: m44-integration
+    runs-on: windows-latest
+    needs: [dotnet, flutter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Isolated M44 GUI workflow test (test-owned TEMP)
+        working-directory: apps/desktop_flutter
+        env:
+          TEMP: ${{ github.workspace }}\cf-m44-ci
+          TMP: ${{ github.workspace }}\cf-m44-ci
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:TEMP | Out-Null
+          flutter config --enable-windows-desktop
+          flutter pub get
+          flutter test integration_test/m44_verify_test.dart -d windows
