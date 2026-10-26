@@ -31,19 +31,48 @@ public sealed class CompositeStartupInventory : IStartupSource
         }).ToArray();
 }
 
-/// <summary>HKCU\...\Run — current-user autostart registry values.</summary>
+/// <summary>
+/// Decodes a StartupApproved\Run (REG_BINARY) state blob. Third-party
+/// documented, not official: byte 0 = 0x02/0x03 enabled, 0x06 disabled.
+/// Anything unrecognized reports "unknown" — never guessed.
+/// </summary>
+public static class StartupApprovedState
+{
+    public const string Enabled = "enabled";
+    public const string Disabled = "disabled";
+    public const string Unknown = "unknown";
+
+    public static string Decode(byte[]? blob) => blob is { Length: >= 1 }
+        ? blob[0] switch
+        {
+            0x02 or 0x03 => Enabled,
+            0x06 => Disabled,
+            _ => Unknown,
+        }
+        : Enabled; // no approval record = enabled
+}
+
+/// <summary>HKCU/HKLM Run or RunOnce autostart registry values. The approval
+/// lookup (when wired) joins each value name to its StartupApproved blob so
+/// disabled entries are reported instead of silently skipped.</summary>
 public sealed class RunKeyStartupSource : IStartupSource
 {
     private readonly Func<IEnumerable<(string Name, string Value)>> _readValues;
     private readonly Func<string, string?> _companyOf;
+    private readonly string _source;
+    private readonly Func<string, byte[]?>? _approvalOf;
 
     /// <summary>Injectable for tests; production wires registry + version info.</summary>
     public RunKeyStartupSource(
         Func<IEnumerable<(string, string)>> readValues,
-        Func<string, string?> companyOf)
+        Func<string, string?> companyOf,
+        string source = "registry-run-user",
+        Func<string, byte[]?>? approvalOf = null)
     {
         _readValues = readValues;
         _companyOf = companyOf;
+        _source = source;
+        _approvalOf = approvalOf;
     }
 
     public IReadOnlyList<StartupEntry> Enumerate()
@@ -53,8 +82,11 @@ public sealed class RunKeyStartupSource : IStartupSource
         {
             var exePath = ExtractExePath(value);
             var publisher = exePath is null ? null : _companyOf(exePath);
+            var status = _approvalOf is null
+                ? StartupApprovedState.Enabled
+                : StartupApprovedState.Decode(_approvalOf(name));
             list.Add(new StartupEntry(
-                name, "registry-run-user", value, publisher, "enabled",
+                name, _source, value, publisher, status,
                 publisher is null ? "unknown" : "verified"));
         }
         return list;

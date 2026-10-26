@@ -149,6 +149,12 @@ per-candidate locks, idempotent commits), `Recovery` (startup reconcile,
 ambiguous → RecoveryRequired). See `docs/recovery.md` for the state machine.
 IPC additions: `cleanup.preview|commit|status|restore|cancel`, `history.get`.
 
+**M8.5 additions:** startup coverage widened to HKCU Run + RunOnce and HKLM
+Run + RunOnce across 64/32-bit views, each joined to its
+`StartupApproved\Run` blob (`StartupApprovedState`: 0x02/0x03 enabled, 0x06
+disabled, everything else `unknown` — undocumented states never guessed).
+Still read-only; toggling and Task Scheduler/services remain later gates.
+
 **M8.4 additions:** `ClearForge.Engine/Apps/AppInventory` — installed-app
 inventory built from raw uninstall-hive rows (`RawUninstallEntry`) produced
 by `ClearForge.Windows/WindowsAppInventory` (HKLM 64/32 + HKCU, read-only).

@@ -36,7 +36,7 @@ var scopes = new ClearForge.Engine.Duplicates.ScopeRegistry()
     .Add("documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments))
     .Add("desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory));
 var dupes = new ClearForge.Engine.Duplicates.DuplicateFinder(scopes);
-var startup = WindowsStartupInventory.CurrentUser();
+var startup = WindowsStartupInventory.All();
 var apps = ClearForge.Windows.WindowsAppInventory.All();
 var privacy = new ClearForge.Engine.Privacy.BrowserPrivacyScanner(
     ClearForge.Engine.Privacy.BrowserPrivacyScanner.DefaultSpecs(
