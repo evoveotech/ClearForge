@@ -2,7 +2,17 @@ ClearForge
 Copyright (c) 2026 Evoveo Tech. All rights reserved.
 
 This product includes proprietary software developed by and owned by
-Evoveo Tech. Unauthorized use, reproduction, or distribution is prohibited.
+Evoveo Tech, including contributions made by members of the open source
+community under the ClearForge Contributor License Agreement (CLA.md),
+under which all such contributions are assigned and/or licensed to
+Evoveo Tech.
+
+Evoveo Tech retains the sole and exclusive right to license, sell,
+commercialize, relicense, dual-license, or distribute ClearForge — in
+whole or in part — under any terms it chooses, at any time.
+
+Unauthorized use, reproduction, or distribution outside the terms of
+LICENSE is prohibited.
 
 Third-party components are used under their respective licenses; see
 package manifests (pubspec.yaml, *.csproj) for the dependency list.

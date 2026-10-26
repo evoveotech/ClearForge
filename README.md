@@ -33,10 +33,20 @@ Prereqs: .NET SDK per `global.json` (9.0.203, targets net8.0), Flutter stable wi
 
 M1 is read-only by construction: the engine exposes scan/preview/cancel/history only; `cleanup.commit` returns `cleanup_not_enabled`. Deletion lands in M2 behind session-bound candidate IDs, pre-execution revalidation, and quarantine-first semantics — see `docs/cleanup-policy.md`.
 
+## Contributing
+
+The open source community is invited to participate — bug reports,
+feature ideas, reviews, and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md). All contributions are governed by the
+[ClearForge Contributor License Agreement](CLA.md): by contributing you
+assign/broadly license your work to Evoveo Tech.
+
 ## License
 
 Copyright (c) 2026 Evoveo Tech. All rights reserved.
 
-ClearForge is proprietary software owned exclusively by Evoveo Tech.
-See `LICENSE` and `NOTICE` for terms. No permission is granted to use,
-copy, modify, or distribute this software without prior written consent.
+ClearForge is source-available, community-invited, and proprietary.
+Evoveo Tech retains exclusive ownership of the software and all
+contributions, and the sole right to commercialize, relicense, or
+distribute it under any terms at any time. See `LICENSE`, `NOTICE`,
+`CLA.md`, and `CONTRIBUTING.md`.

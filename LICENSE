@@ -2,23 +2,47 @@ ClearForge Proprietary License
 
 Copyright (c) 2026 Evoveo Tech. All rights reserved.
 
-This software and associated documentation files (the "Software"), including
-all source code, object code, scripts, tests, configurations, documentation,
-and related assets in this repository, are the proprietary and confidential
-property of Evoveo Tech.
+This software and associated documentation files (the "Software"),
+including all source code, object code, scripts, tests, configurations,
+documentation, and related assets in this repository, are the proprietary
+and confidential property of Evoveo Tech.
 
 All right, title, and interest in and to the Software — including all
 intellectual property rights — are owned exclusively by Evoveo Tech.
 
+PERMITTED USE
+
 No permission is granted to any person or entity to use, copy, modify,
-merge, publish, distribute, sublicense, sell, rent, lease, reverse engineer,
-or create derivative works of the Software, in whole or in part, except with
-the prior express written permission of Evoveo Tech or as required by
-applicable law.
+merge, publish, distribute, sublicense, sell, rent, lease, or create
+derivative works of the Software, in whole or in part, except:
+
+  (a) as required by applicable law; or
+  (b) with the prior express written permission of Evoveo Tech; or
+  (c) solely to the extent necessary to view the Software and to prepare
+      and submit a Contribution back to this project, in which case the
+      Contribution is governed by the ClearForge Contributor License
+      Agreement (see CLA.md and CONTRIBUTING.md).
 
 Access to this repository does not grant any license, express or implied,
-under any patent, copyright, trademark, or other intellectual property right
-of Evoveo Tech.
+under any patent, copyright, trademark, or other intellectual property
+right of Evoveo Tech.
+
+COMMUNITY PARTICIPATION
+
+Evoveo Tech welcomes review, feedback, and contributions from the open
+source community. Community participation is governed exclusively by the
+ClearForge Contributor License Agreement (CLA.md) and the contribution
+terms in CONTRIBUTING.md. Nothing in this License grants contributors or
+any other person any ownership interest, co-authorship right, or license
+to the Software beyond the limited right to submit Contributions.
+
+COMMERCIAL AND DISTRIBUTION RIGHTS
+
+Evoveo Tech retains the sole and exclusive right to license, sell,
+commercialize, relicense, dual-license, or otherwise distribute the
+Software — including all Contributions — under any terms Evoveo Tech
+chooses, at any time, without notice to or consent from any contributor
+or third party.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
