@@ -71,7 +71,10 @@ var smartScan = new ClearForge.Engine.SmartScan.SmartScanCoordinator(
         new ClearForge.Engine.SmartScan.StorageReviewProducer(inventory),
     });
 
-var dispatcher = new RequestDispatcher(scans, executor, journal, dupes, scopes, startup, apps, privacy, cacheScan, inventory, actionBridge, models, smartScan);
+var leftovers = new ClearForge.Engine.Apps.LeftoverEnvironment(
+    ClearForge.Windows.WindowsAppLeftovers.Roots(),
+    ClearForge.Windows.WindowsAppLeftovers.ChildrenOf);
+var dispatcher = new RequestDispatcher(scans, executor, journal, dupes, scopes, startup, apps, privacy, cacheScan, inventory, actionBridge, models, smartScan, leftovers);
 var pipeName = args.FirstOrDefault() ?? PipeServerHost.DefaultPipeName;
 
 await using var host = new PipeServerHost(dispatcher, pipeName);

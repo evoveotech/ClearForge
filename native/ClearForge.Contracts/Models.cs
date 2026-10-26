@@ -199,6 +199,21 @@ public sealed record AppListResponse(
     [property: JsonPropertyName("apps")] IReadOnlyList<AppEntryDto> Apps,
     [property: JsonPropertyName("note")] string Note);
 
+// M8.4b read-only per-app leftover map — evidence, never executable.
+public sealed record LeftoverCandidateDto(
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("root")] string Root,
+    // "name" | "publisher" | "install-leaf" | "nested" (may be "+"-joined)
+    [property: JsonPropertyName("matchBasis")] string MatchBasis,
+    // "exact" (app's own name/leaf/nested) | "publisher-context"
+    [property: JsonPropertyName("confidence")] string Confidence,
+    [property: JsonPropertyName("reason")] string Reason);
+
+public sealed record AppLeftoversResponse(
+    [property: JsonPropertyName("candidates")] IReadOnlyList<LeftoverCandidateDto> Candidates,
+    [property: JsonPropertyName("reviewOnly")] bool ReviewOnly,
+    [property: JsonPropertyName("note")] string Note);
+
 public sealed record PrivacyCategoryDto(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("available")] bool Available,

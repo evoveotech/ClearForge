@@ -24,6 +24,18 @@
 - Flutter: Apps nav destination; load + name/publisher filter + system/update
   chip; honest read-only note. No mutation affordances.
 
+## M8.4b (this session) — per-app leftover map, review-only
+
+- `apps.leftovers {name, publisher?, installLocation?}` → exact
+  normalized-name matches under Roaming/Local/ProgramData. `exact` vs
+  `publisher-context` confidence, `reviewOnly: true`, never-flag token
+  guard, per-root failure isolation, nested Vendor\App dirs one level deep.
+- Substring matching deliberately absent; orphan-detection deferred
+  (unattributed dirs need a separate evidence model — FP risk).
+- Remaining M8.4b work: Apps-screen leftovers surface, guided uninstall
+  deep-link, Appx enumeration decision, session-bound leftover quarantine
+  (needs its own milestone + approval flow).
+
 ## Deliberately excluded (explicit, not forgotten)
 
 - Appx/MSIX enumeration (PackageManager/PowerShell) — M8.4b evaluation.

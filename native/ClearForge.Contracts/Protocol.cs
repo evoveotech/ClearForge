@@ -28,6 +28,8 @@ public static class Protocol
         public const string StartupList = "startup.list";
         // M8.4: read-only installed-application inventory.
         public const string AppsList = "apps.list";
+        // M8.4b: read-only per-app leftover map (review evidence only).
+        public const string AppsLeftovers = "apps.leftovers";
         public const string PrivacyDetect = "privacy.detect";
         public const string PrivacyScanCache = "privacy.scanCache";
         public const string StorageInventory = "storage.inventory";

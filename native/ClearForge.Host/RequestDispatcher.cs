@@ -43,7 +43,8 @@ public sealed class RequestDispatcher
         ClearForge.Engine.Storage.StorageInventory? inventory = null,
         ClearForge.Engine.Storage.RecommendationActionBridge? actionBridge = null,
         ClearForge.Models.ModelManager? models = null,
-        ClearForge.Engine.SmartScan.SmartScanCoordinator? smartScan = null)
+        ClearForge.Engine.SmartScan.SmartScanCoordinator? smartScan = null,
+        ClearForge.Engine.Apps.LeftoverEnvironment? leftovers = null)
     {
         _scans = scans;
         _executor = executor;
@@ -58,9 +59,11 @@ public sealed class RequestDispatcher
         _actionBridge = actionBridge;
         _models = models;
         _smartScan = smartScan;
+        _leftovers = leftovers;
     }
 
     private readonly ClearForge.Engine.SmartScan.SmartScanCoordinator? _smartScan;
+    private readonly ClearForge.Engine.Apps.LeftoverEnvironment? _leftovers;
 
     public Task<DispatchResult> Dispatch(string method, JsonElement? p) => method switch
     {
@@ -83,6 +86,7 @@ public sealed class RequestDispatcher
         Protocol.Methods.DuplicatesGroup => Task.FromResult(DuplicatesGroup(p)),
         Protocol.Methods.StartupList => Task.FromResult(StartupList()),
         Protocol.Methods.AppsList => Task.FromResult(AppsList()),
+        Protocol.Methods.AppsLeftovers => Task.FromResult(AppsLeftovers(p)),
         Protocol.Methods.PrivacyDetect => Task.FromResult(PrivacyDetect()),
         Protocol.Methods.PrivacyScanCache => Task.FromResult(PrivacyScanCache(p)),
         Protocol.Methods.StorageInventory => Task.FromResult(StorageInventory(p)),
@@ -628,6 +632,35 @@ public sealed class RequestDispatcher
             "Read-only inventory of registered applications. Classic desktop "
             + "installers only — Store/Appx packages are not enumerated yet. "
             + "Uninstall via Settings > Apps > Installed apps."));
+    }
+
+    /// <summary>
+    /// M8.4b per-app leftover map: exact-normalized-name matching over three
+    /// bounded roots, review-only — the response carries evidence for a human
+    /// decision, never session candidates or an executable binding.
+    /// </summary>
+    private DispatchResult AppsLeftovers(JsonElement? p)
+    {
+        if (_leftovers is null)
+            return DispatchResult.Fail(Protocol.Errors.PolicyRefused, "leftovers module not configured");
+        if (p is null || p.Value.ValueKind != JsonValueKind.Object
+            || !p.Value.TryGetProperty("name", out var nameEl)
+            || nameEl.ValueKind != JsonValueKind.String
+            || nameEl.GetString() is not { Length: > 0 } name)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "name required");
+        string? publisher = p.Value.TryGetProperty("publisher", out var pubEl)
+            && pubEl.ValueKind == JsonValueKind.String ? pubEl.GetString() : null;
+        string? location = p.Value.TryGetProperty("installLocation", out var locEl)
+            && locEl.ValueKind == JsonValueKind.String ? locEl.GetString() : null;
+        var candidates = ClearForge.Engine.Apps.LeftoverMatcher
+            .Match(name, publisher, location, _leftovers.Roots, _leftovers.ChildrenOf)
+            .Select(c => new LeftoverCandidateDto(
+                c.Path, c.Root, c.MatchBasis, c.Confidence, c.Reason)).ToArray();
+        return DispatchResult.Ok(new AppLeftoversResponse(candidates,
+            ReviewOnly: true,
+            "Review evidence only — exact-name directory matches under the "
+            + "three leftover roots. Verify each entry yourself; nothing "
+            + "here is selected or executable."));
     }
 
     private DispatchResult PrivacyScanCache(JsonElement? p)

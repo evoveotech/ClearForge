@@ -163,6 +163,15 @@ confidence live in the engine so fixtures exercise real semantics; per-source
 failure isolation via `CompositeAppInventory`. IPC addition: `apps.list`.
 No uninstall, reset, or leftover mutation in this milestone.
 
+**M8.4b additions:** `apps.leftovers` — read-only per-app leftover map over
+three bounded roots (Roaming, Local, ProgramData). `LeftoverMatcher` uses
+exact normalized-name equality only (never substring), rejects generic
+vendor tokens (`microsoft`, `backup`, `cache`…) as a match basis, and
+descends one level under publisher-named dirs (Vendor\AppName). Confidence
+is `exact` (app name/install leaf/nested) vs `publisher-context`. Response
+carries `reviewOnly: true` evidence — no session binding, nothing
+executable. Orphaned-leftover detection deferred (FP class documented).
+
 ## Processes
 
 ```
