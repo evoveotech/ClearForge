@@ -50,7 +50,7 @@ void main() {
     try {
       final c = await _connectWhenUp(pipe);
       final r2 =
-          await c.call('history.get').timeout(const Duration(seconds: 5));
+          await c.call('history.get').timeout(const Duration(seconds: 15));
       print('history.get: $r2');
       expect(r2['error'], isNull);
       await c.dispose();

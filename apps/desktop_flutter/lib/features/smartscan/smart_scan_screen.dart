@@ -51,7 +51,13 @@ class SmartScanScreen extends StatelessWidget {
                         'Quarantine ${controller.smartSelected.length} finding(s)'),
                   ),
                 const Spacer(),
-                if (scan != null) Text(_summary(scan)),
+                if (scan != null)
+                  Flexible(
+                    child: Text(_summary(scan),
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ),
               ]),
               const SizedBox(height: 8),
               if (controller.smartNeedsRescan)
