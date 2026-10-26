@@ -2,9 +2,7 @@
 
 Status legend: `[x]` verified with evidence · `[ ]` open · `~` partial/in progress.
 Last updated: 2026-10-27 (post-M8.4b, HEAD ~`ff85847`).
-
 ## Windows — current status: not yet RELEASE-READY
-
 - [x] Engine + unit/integration suites green (`dotnet test` 384/384 local; CI green)
 - [x] `flutter test` (70) + `flutter analyze` clean
 - [x] `flutter build windows --release` produces a working binary (verified: app launches, spawns bundled engine)
@@ -21,20 +19,15 @@ Last updated: 2026-10-27 (post-M8.4b, HEAD ~`ff85847`).
 - [x] Upgrade validation: install-over-install verified (idempotent, 213 files); rollback = reinstall older package (no versioned rollback machinery — documented limitation)
 - [ ] Clean-machine install test (installer verified on dev machine only; a machine without the dev toolchain is still unverified)
 - [ ] Code-signed engine + UI binaries; signature verification test — **BLOCKED on signing identity**
-- [ ] Clean-machine install test (installer verified on dev machine only; a machine without the dev toolchain is still unverified)
 - [ ] Privacy policy + vulnerability-disclosure channel published
 - [x] No "performance boost" / "100% safe" claims in UI or docs (audited during copy review)
 - [ ] Trademark/domain check for "ClearForge"
 - [x] Telemetry: none exists; AI is local-only; any future opt-in must carry no file paths
-
 ## macOS — status: BLOCKED
-
 - [ ] macOS build environment (no toolchain access on dev host)
 - [ ] Platform adapter implementation + verification
 - [ ] Signing + notarization
-
 ## Publication gates — all open
-
 - [ ] `RELEASE-READY` requires every `[x]` above + clean-machine + installer validation
 - [ ] `SHIPPED` requires an authorized identity to sign and publish
 - [x] No platform is labelled `SHIPPED` or `RELEASE-READY` prematurely — status labels used in `tasks/roadmap.md`
