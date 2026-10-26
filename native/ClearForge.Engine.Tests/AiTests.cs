@@ -89,7 +89,7 @@ public class AiWorkerLiveTests : IDisposable
         foreach (var p in _procs) { try { if (!p.HasExited) p.Kill(); } catch { } }
     }
 
-    private Process SpawnWorker(string pipe = "clearforge.ai.v1")
+    private Process SpawnWorker(string pipe)
     {
         Assert.True(File.Exists(ExePath), $"worker exe missing: {ExePath}");
         var p = Process.Start(new ProcessStartInfo(ExePath, pipe)
@@ -138,8 +138,8 @@ public class AiWorkerLiveTests : IDisposable
     [Fact]
     public async Task Worker_health_and_bounded_surface()
     {
-        SpawnWorker();
-        await using var pipe = await ConnectPipe("clearforge.ai.v1");
+        SpawnWorker("clearforge.ai.t.health");
+        await using var pipe = await ConnectPipe("clearforge.ai.t.health");
         var h = await Call(pipe, "1", "ai.health");
         Assert.Equal("ok", h.GetProperty("result").GetProperty("status").GetString());
         var bad = await Call(pipe, "2", "cleanup.commit");
@@ -149,8 +149,8 @@ public class AiWorkerLiveTests : IDisposable
     [Fact]
     public async Task Infer_without_model_reports_missing()
     {
-        SpawnWorker();
-        await using var pipe = await ConnectPipe("clearforge.ai.v1");
+        SpawnWorker("clearforge.ai.t.infer_missing");
+        await using var pipe = await ConnectPipe("clearforge.ai.t.infer_missing");
         var r = await Call(pipe, "1", "ai.infer",
             new { goal = "free 10 GB", recommendations = Array.Empty<object>() });
         Assert.Equal("model_missing",
@@ -160,8 +160,8 @@ public class AiWorkerLiveTests : IDisposable
     [Fact]
     public async Task Uncurated_and_missing_models_rejected()
     {
-        SpawnWorker();
-        await using var pipe = await ConnectPipe("clearforge.ai.v1");
+        SpawnWorker("clearforge.ai.t.uncurated");
+        await using var pipe = await ConnectPipe("clearforge.ai.t.uncurated");
         var bad = await Call(pipe, "1", "ai.model.load", new { modelId = "evil.gguf" });
         Assert.Equal("model_unsupported",
             bad.GetProperty("error").GetProperty("code").GetString());
