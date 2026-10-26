@@ -216,15 +216,18 @@ public sealed class ModelManager
 
         lock (_gate)
         {
+            // Already-installed models never re-download; install is a no-op.
+            // Checked before the busy gate: a just-finished op whose task
+            // handle has not yet been observed completed must not turn a
+            // legitimate "already installed" state into a false model_busy.
+            var current = CurrentState(e, null);
+            if (current.State == States.Ready)
+                return current;
+
             if (_ops.TryGetValue(id, out var running) && !running.Run.IsCompleted)
                 throw new ModelException("model_busy",
                     $"an operation is already running for '{id}'");
             _ops.Remove(id);
-
-            // Already-installed models never re-download; install is a no-op.
-            var current = CurrentState(e, null);
-            if (current.State == States.Ready)
-                return current;
 
             var cts = new CancellationTokenSource();
             var op = new Op { Cts = cts };
