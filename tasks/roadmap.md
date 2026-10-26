@@ -27,7 +27,7 @@ RELEASE-READY / SHIPPED / BLOCKED — never interchange.
 | M8.3 | Duplicate review: keeper selection, group binding, fail-closed enforcement | DONE/VERIFIED | commit `3bac212`; 337+56 tests |
 | M8.3r | Disk explorer: treemap (Space Lens), large/old files, hardlink consolidation | TODO | roadmap in gap doc §M8.3; none found in source. Design note: large/old over Downloads/Documents/Desktop requires those dirs as *trusted roots* (today they're only ScopeRegistry scan scopes) — expanding trusted-root surface is a deliberate decision, not a silent widening; candidate rule: `user-large-old-files` (size≥50MB AND age≥180d, review-only risk tier, named scopes only, depth bound) |
 | M8.4a | Application inventory (read-only) | DONE/VERIFIED | 355/355 + 61/61 tests; `apps.list` over HKLM64/32+HKCU |
-| M8.4b | Leftover mapping + guided uninstall (deep-link only, never auto-run) | PARTIAL/DONE-engine | `apps.leftovers` review-only matcher shipped; UI surface + guided uninstall + Appx still open |
+| M8.4b | Leftover mapping + guided uninstall (deep-link only, never auto-run) | PARTIAL | `apps.leftovers` matcher + Apps-screen review dialog shipped (engine `8846e1a`, UI `c797b5b`); open: guided uninstall deep-link, Appx decision, session-bound leftover quarantine |
 | M8.5 | Startup completeness: HKLM Run/RunOnce, HKCU RunOnce, StartupApproved disabled-state | DONE/VERIFIED | 367/367 .NET tests; read-only; Scheduler/services → M8.5b |
 | M8.5b | Startup: Task Scheduler + services read-only, toggling (journaled) | TODO | dep M8.5 |
 | M9 | Extensions inventory (review-only), monitoring/tray, winget drift, browser history/cookies (lifecycle review gate), scheduling | TODO | gap doc §M9+ |
