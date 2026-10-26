@@ -23,7 +23,10 @@ Last updated: 2026-10-27 (post-M8.4b + REL-2, HEAD ~`ea2af7d`).
 - [ ] Code-signed engine + UI binaries; signature verification test — **BLOCKED on signing identity**
 - [x] Privacy policy + vulnerability-disclosure channel published (`docs/privacy.md` + GitHub Security Advisories)
 - [x] No "performance boost" / "100% safe" claims in UI or docs (audited during copy review)
-- [ ] Trademark/domain check for "ClearForge"
+- [ ] Trademark — **RISK FLAGGED**: "ClearForge" is already used by Clearforge
+      Software LLC (clearforgesoftware.com, iOS consumer apps) and ClearForge
+      LLC (clearforge.dev, software consultancy). Same software market class —
+      rename or obtain formal clearance before any commercial release
 - [x] Telemetry: none exists; AI is local-only; any future opt-in must carry no file paths
 
 ## macOS — status: BLOCKED

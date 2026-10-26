@@ -64,7 +64,8 @@ shredder (conflicts with no-permanent-delete invariant), signature AV
 
 | Risk | Severity | Owner | Status |
 |---|---|---|---|
-| No installer → product cannot ship/run installed | High | REL-1/REL-2 | open |
+| "ClearForge" name collides with two existing software companies (clearforgesoftware.com iOS apps; clearforge.dev consultancy) — same market class | High | REL-legal | **open — rename or formal clearance required** |
+| No installer → product cannot ship/run installed | High | REL-1/REL-2 | mitigated: portable ZIP + Inno installer verified; unsigned |
 | macOS entirely unbuilt and unverifiable on this host | High | MAC-1 | BLOCKED externally |
 | Leftover name-matching false positives (M8.4b) | Med | M8.4b | mitigate: lineage model + never-flag list + review-only default |
 | Session/eviction bounds | Closed | — | MaxSessions=128, 60min retention, scanning never evicted |
