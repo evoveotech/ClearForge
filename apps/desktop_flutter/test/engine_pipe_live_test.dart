@@ -8,11 +8,23 @@ import 'package:clearforge_desktop/core/ipc/engine_pipe_client.dart';
 /// pipe name for isolation) and verifies the transport can both write and
 /// read — the original design deadlocked because a blocking ReadFile
 /// starved the write queue on the same synchronous pipe handle.
-const hostExe =
-    r'C:\Users\hardi\IdeaProjects\HardiksTool\ClearForgeData\native\ClearForge.Host\bin\Debug\net8.0\ClearForge.Host.exe';
+/// The live host is located through the same resolution order the app uses —
+/// no user-specific absolute path. When the engine simply isn't built (CI
+/// lanes that don't compile it, fresh checkouts) the live tests skip rather
+/// than fail: they exercise a real process, not a contract.
+String? _hostExe() {
+  // Under `flutter test` the resolved executable is the flutter_tester binary
+  // inside the SDK, so default discovery cannot see the repo; the package
+  // working directory walk-up can.
+  for (final base in <String?>[null, Directory.current.path]) {
+    final p = EngineProcess.resolveEnginePath(appDir: base);
+    if (p.isNotEmpty) return p;
+  }
+  return null;
+}
 
-Future<Process> _spawnHost(String pipe) =>
-    Process.start(hostExe, [pipe], mode: ProcessStartMode.normal);
+Future<Process> _spawnHost(String pipe, String exe) =>
+    Process.start(exe, [pipe], mode: ProcessStartMode.normal);
 
 Future<EngineClient> _connectWhenUp(String pipe) async {
   for (var i = 0; i < 40; i++) {
@@ -28,8 +40,13 @@ Future<EngineClient> _connectWhenUp(String pipe) async {
 
 void main() {
   test('sequential calls on one client both complete', () async {
+    final exe = _hostExe();
+    if (exe == null) {
+      print('engine host not built — skipping live pipe test');
+      return;
+    }
     final pipe = 'cf-test-${DateTime.now().microsecondsSinceEpoch}';
-    final proc = await _spawnHost(pipe);
+    final proc = await _spawnHost(pipe, exe);
     try {
       final c = await _connectWhenUp(pipe);
       final r2 =
@@ -43,8 +60,13 @@ void main() {
   }, timeout: const Timeout(Duration(seconds: 30)));
 
   test('host death completes pending calls and blocks new calls', () async {
+    final exe = _hostExe();
+    if (exe == null) {
+      print('engine host not built — skipping live pipe test');
+      return;
+    }
     final pipe = 'cf-test-${DateTime.now().microsecondsSinceEpoch}d';
-    final proc = await _spawnHost(pipe);
+    final proc = await _spawnHost(pipe, exe);
     try {
       final c = await _connectWhenUp(pipe);
       proc.kill();

@@ -59,8 +59,12 @@ public class IntentBenchmarkTests
     [Fact]
     public async Task Fixed_benchmark_suite_against_real_model()
     {
+        if (ModelGate.ShouldSkip(ModelPath,
+                nameof(Fixed_benchmark_suite_against_real_model)))
+            return;
         Assert.True(File.Exists(ModelPath),
-            $"dev model absent at {ModelPath} — skipping benchmark");
+            $"dev model absent at {ModelPath} — benchmark cannot run " +
+            "(install the curated model, or set CLEARFORGE_SKIP_MODEL_TESTS=1)");
         Assert.True(File.Exists(DatasetPath), $"dataset missing: {DatasetPath}");
         Assert.True(File.Exists(ExePath), $"worker exe missing: {ExePath}");
 

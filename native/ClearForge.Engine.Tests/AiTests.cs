@@ -180,8 +180,11 @@ public class AiWorkerLiveTests : IDisposable
     [Fact]
     public async Task Full_load_infer_unload_benchmark()
     {
+        if (ModelGate.ShouldSkip(ModelPath, nameof(Full_load_infer_unload_benchmark)))
+            return;
         Assert.True(File.Exists(ModelPath),
-            $"dev model absent at {ModelPath} — skipping live-model test");
+            $"dev model absent at {ModelPath} — live-model test cannot run " +
+            "(install the curated model, or set CLEARFORGE_SKIP_MODEL_TESTS=1)");
         var p = SpawnWorker("clearforge.ai.bench");
         await using var pipe = await ConnectPipe("clearforge.ai.bench");
 
