@@ -21,7 +21,7 @@ Last updated: 2026-10-27 (post-M8.4b + REL-2, HEAD ~`ea2af7d`).
 - [x] Upgrade validation: install-over-install verified (idempotent, 213 files); rollback = reinstall older package (no versioned rollback machinery — documented limitation)
 - [ ] Clean-machine install test (installer verified on dev machine only; a machine without the dev toolchain is still unverified)
 - [ ] Code-signed engine + UI binaries; signature verification test — **BLOCKED on signing identity**
-- [ ] Privacy policy + vulnerability-disclosure channel published
+- [x] Privacy policy + vulnerability-disclosure channel published (`docs/privacy.md` + GitHub Security Advisories)
 - [x] No "performance boost" / "100% safe" claims in UI or docs (audited during copy review)
 - [ ] Trademark/domain check for "ClearForge"
 - [x] Telemetry: none exists; AI is local-only; any future opt-in must carry no file paths
