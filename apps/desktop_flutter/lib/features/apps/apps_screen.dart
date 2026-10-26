@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/models/scan_models.dart';
@@ -91,7 +93,7 @@ class _AppsScreenState extends State<AppsScreen> {
                         itemCount: visible.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, i) =>
-                            _AppTile(app: visible[i]),
+                            _AppTile(app: visible[i], controller: controller),
                       ),
               ),
             ],
@@ -104,7 +106,78 @@ class _AppsScreenState extends State<AppsScreen> {
 
 class _AppTile extends StatelessWidget {
   final Map<String, dynamic> app;
-  const _AppTile({required this.app});
+  final EngineController controller;
+  const _AppTile({required this.app, required this.controller});
+
+  /// M8.4b: per-app leftover evidence — read-only review dialog, never a
+  /// selection or an executable action.
+  Future<void> _showLeftovers(BuildContext context) async {
+    unawaited(controller.loadLeftovers(app));
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => ListenableBuilder(
+        listenable: controller,
+        builder: (ctx2, _) {
+          final items = controller.appLeftovers;
+          return AlertDialog(
+            title: Text('Leftovers — ${controller.leftoversFor ?? ''}'),
+            content: SizedBox(
+              width: 560,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      'Review evidence only — exact-name directory matches '
+                      'under user data folders. Verify each entry yourself; '
+                      'nothing here is selected or deleted.',
+                      style: Theme.of(ctx).textTheme.bodySmall),
+                  const SizedBox(height: 12),
+                  if (controller.leftoversLoading)
+                    const Center(
+                        child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: CircularProgressIndicator()))
+                  else if (items.isEmpty)
+                    const Text('No matching leftover directories found.')
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (ctx3, i) {
+                          final c = items[i];
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(c['confidence'] == 'exact'
+                                ? Icons.verified_outlined
+                                : Icons.folder_shared_outlined),
+                            title: Text('${c['path']}',
+                                overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                                '${c['root']} · ${c['matchBasis']} · '
+                                '${c['confidence']}\n${c['reason']}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,13 +210,23 @@ class _AppTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         maxLines: 2,
       ),
-      trailing: Text(
-        [
-          if (sizeBytes != null) formatBytes(sizeBytes),
-          if (app['installDate'] != null) app['installDate'],
-        ].join('\n'),
-        textAlign: TextAlign.end,
-        style: Theme.of(context).textTheme.bodySmall,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            [
+              if (sizeBytes != null) formatBytes(sizeBytes),
+              if (app['installDate'] != null) app['installDate'],
+            ].join('\n'),
+            textAlign: TextAlign.end,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          IconButton(
+            tooltip: 'Find leftover directories (review only)',
+            icon: const Icon(Icons.find_in_page_outlined, size: 18),
+            onPressed: () => _showLeftovers(context),
+          ),
+        ],
       ),
     );
   }

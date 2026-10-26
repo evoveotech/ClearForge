@@ -714,6 +714,38 @@ class EngineController extends ChangeNotifier {
     }
   }
 
+  /// M8.4b: review-only leftover candidates for one app — evidence for a
+  /// human decision, never executable selections.
+  List<Map<String, dynamic>> appLeftovers = [];
+  String? leftoversFor;
+  bool leftoversLoading = false;
+
+  Future<void> loadLeftovers(Map<String, dynamic> app) async {
+    if (_client == null || leftoversLoading) return;
+    leftoversLoading = true;
+    leftoversFor = app['name'] as String?;
+    appLeftovers = [];
+    notifyListeners();
+    try {
+      final res = await _client!.call('apps.leftovers', {
+        'name': app['name'],
+        if (app['publisher'] != null) 'publisher': app['publisher'],
+        if (app['installLocation'] != null)
+          'installLocation': app['installLocation'],
+      });
+      if (res['error'] != null) {
+        errorMessage = res['error']['message'] as String?;
+      } else {
+        appLeftovers =
+            (res['result']?['candidates'] as List<dynamic>? ?? [])
+                .cast<Map<String, dynamic>>();
+      }
+    } finally {
+      leftoversLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Browser cache scan: produces a normal scan session — candidates flow
   /// through the shared preview/commit/quarantine pipeline.
   Future<void> startPrivacyCacheScan() async {
