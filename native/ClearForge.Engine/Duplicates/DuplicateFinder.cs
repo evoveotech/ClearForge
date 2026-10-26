@@ -27,10 +27,14 @@ public sealed class ScopeRegistry
                .ToDictionary(kv => kv.Key, kv => kv.Value);
 }
 
-/// <summary>One duplicate group: ≥2 files with identical SHA-256 content.</summary>
+/// <summary>
+/// One duplicate group: ≥2 files with identical SHA-256 content. Sha256 is
+/// the full lowercase hex digest (the grouping proof); Sha256Short is a
+/// display prefix for compact list rows.
+/// </summary>
 public sealed record DuplicateGroup(
     string GroupId, string Sha256Short, long FileBytes, int Copies,
-    IReadOnlyList<ScanCandidate> Candidates);
+    IReadOnlyList<ScanCandidate> Candidates, string Sha256);
 
 public sealed record DuplicateReport(
     string SessionId, int GroupCount, long EstimatedRecoverableBytes,
@@ -159,13 +163,21 @@ public sealed class DuplicateFinder
                         f.Lw, FileAttributes.Normal);
                     lock (session.Items) session.Items.Add((scanned, candidate));
                 }
-                groups.Add(new DuplicateGroup(gid, hash[..16], size, files.Count, cands));
+                groups.Add(new DuplicateGroup(
+                    gid, hash[..16], size, files.Count, cands,
+                    hash.ToLowerInvariant()));
             }
         }
 
-        return new DuplicateReport(
+        var report = new DuplicateReport(
             session.Id, groups.Count,
             groups.Sum(g => g.FileBytes * (g.Copies - 1)), // keep one copy
             groups);
+        // The session owns its group evidence — preview/commit enforcement
+        // and the review endpoint both resolve membership from here,
+        // regardless of whether the session came from duplicates.start or a
+        // Smart Scan child producer.
+        session.DuplicateReport = report;
+        return report;
     }
 }

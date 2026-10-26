@@ -169,9 +169,11 @@ public sealed class BrowserCacheProducer : ISmartScanProducer
 }
 
 /// <summary>
-/// Duplicate-content scan: one actionable finding per group, offering the
-/// redundant copies for quarantine (the newest member is always kept — never
-/// selected). Deterministic grouping on unchanged input.
+/// Duplicate-content scan: one actionable finding per group, binding ALL
+/// members. The engine never picks a keeper — M8.3 routes the finding through
+/// explicit keeper review (duplicates.group → keeper-bound preview → commit);
+/// the candidate set is evidence of coverage, not a pre-decided removal list.
+/// Deterministic grouping on unchanged input.
 /// </summary>
 public sealed class DuplicatesProducer : ISmartScanProducer
 {
@@ -208,25 +210,24 @@ public sealed class DuplicatesProducer : ISmartScanProducer
         var findings = new List<SmartFinding>();
         foreach (var g in report.Groups.OrderBy(g => g.GroupId, StringComparer.Ordinal))
         {
-            // Kept copy: newest write wins, ties break on ordinal path order.
             var members = g.Candidates
-                .Select(c => (c.Id, pathOf[c.Id].CanonicalPath, pathOf[c.Id].LastWriteUtc))
-                .OrderByDescending(m => m.LastWriteUtc)
-                .ThenBy(m => m.CanonicalPath, StringComparer.Ordinal)
+                .Select(c => (c.Id, pathOf[c.Id].CanonicalPath))
+                .OrderBy(m => m.CanonicalPath, StringComparer.Ordinal)
                 .ToArray();
-            var kept = members[0];
-            var redundant = members.Skip(1).Select(m => m.Id).ToArray();
             findings.Add(new SmartFinding(
                 "", Id, DuplicateFinder.Category,
-                $"Duplicate group {g.GroupId} — keep newest, quarantine {redundant.Length} cop{(redundant.Length == 1 ? "y" : "ies")}",
+                $"Duplicate group {g.GroupId} — {members.Length} identical copies, choose which to keep",
                 $"{members.Length} byte-identical files (sha256:{g.Sha256Short}…); " +
-                "redundant copies quarantinable — identical content remains on the kept copy",
-                members.Select(m => $"{(m.Id == kept.Id ? "keep" : "quarantine")}: {m.CanonicalPath}")
-                    .Append($"estimatedLogicalBytes={g.FileBytes * redundant.Length}")
+                "quarantining a copy is safe once you pick which one stays — " +
+                "the chosen keeper is never moved",
+                members.Select(m => $"member: {m.CanonicalPath}")
+                    .Append($"estimatedLogicalBytes={g.FileBytes * (members.Length - 1)}")
                     .ToArray(),
                 "high", RiskLevel.Medium,
-                g.FileBytes * redundant.Length,
-                "quarantinable", true, null, session.Id, redundant));
+                g.FileBytes * (members.Length - 1),
+                "quarantinable", true, null, session.Id,
+                members.Select(m => m.Id).ToArray(),
+                GroupId: g.GroupId));
         }
         return new ProducerOutcome(findings, session, null);
     }

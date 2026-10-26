@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/scan_models.dart';
 import '../../core/state/engine_controller.dart';
+import 'duplicate_group_review.dart';
 
-/// Duplicate finder: group review with an explicit keep choice and an
-/// explicit selection of copies to quarantine. Nothing is auto-selected and
-/// no copy moves without a confirmation — the engine additionally requires
-/// a preview approval for the exact ids committed.
+/// Duplicate finder (M8.3): a list of verified byte-identical groups. Each
+/// group opens the keeper-review dialog — the user inspects every member,
+/// explicitly chooses exactly one copy to keep, checks the copies to
+/// quarantine, and executes through the keeper-bound preview → approval →
+/// commit pipeline. Nothing is auto-selected and no copy moves without
+/// explicit approval recorded engine-side.
 class DuplicatesScreen extends StatefulWidget {
   final EngineController controller;
   const DuplicatesScreen({super.key, required this.controller});
@@ -18,65 +21,18 @@ class DuplicatesScreen extends StatefulWidget {
 class _DuplicatesScreenState extends State<DuplicatesScreen> {
   EngineController get controller => widget.controller;
 
-  /// Per-group review state: the copy index to keep, and the copy indexes
-  /// the user explicitly chose to quarantine.
-  final Map<String, int> _keep = {};
-  final Map<String, Set<int>> _act = {};
+  /// Groups the user fully resolved this session — kept visible as done.
+  final Set<String> _resolved = {};
 
-  String _groupKey(Map<String, dynamic> g) => g['groupId'] as String? ?? '';
-
-  List<String> _candidateIds(Map<String, dynamic> g) =>
-      (g['candidateIds'] as List<dynamic>? ?? []).cast<String>();
-
-  int _keepIndex(String key) => _keep[key] ?? 0;
-  Set<int> _actSet(String key) => _act.putIfAbsent(key, () => <int>{});
-
-  void _setKeep(String key, int index) => setState(() {
-        _keep[key] = index;
-        _actSet(key).remove(index); // the kept copy can never be selected
-      });
-
-  void _toggleAct(String key, int index, bool value) => setState(() {
-        value ? _actSet(key).add(index) : _actSet(key).remove(index);
-      });
-
-  Future<void> _confirmAndCommit(
-      BuildContext context, Map<String, dynamic> g) async {
-    final key = _groupKey(g);
-    final ids = _candidateIds(g);
-    final selected = _actSet(key).toList()..sort();
-    if (selected.isEmpty) return;
-    final sessionId = g['sessionId'] as String? ?? '';
-    final bytes = (g['fileBytes'] as int? ?? 0) * selected.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm quarantine'),
-        content: Text(
-            'Quarantine ${selected.length} duplicate '
-            'cop${selected.length == 1 ? 'y' : 'ies'} '
-            '(${formatBytes(bytes)})? Copy #${_keepIndex(key) + 1} is kept.\n\n'
-            'Files are moved to quarantine, not deleted. '
-            'You can restore them from History.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Quarantine')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final chosen = [for (final k in selected) ids[k]];
-    final ok = await controller.commitDuplicateCandidates(sessionId, chosen);
-    if (ok && mounted) {
-      setState(() {
-        // The committed copies are gone; drop them from the review state.
-        _actSet(key).clear();
-      });
-    }
+  Future<void> _openReview(Map<String, dynamic> g) async {
+    final sessionId = controller.duplicateSessionId ?? '';
+    final groupId = g['groupId'] as String? ?? '';
+    final done = await DuplicateGroupReviewDialog.show(context,
+        controller: controller,
+        sessionId: sessionId,
+        groupId: groupId,
+        onFullyResolved: () => _resolved.add(groupId));
+    if (done == true && mounted) setState(() {});
   }
 
   @override
@@ -91,8 +47,11 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
             Row(children: [
               FilledButton.icon(
                 onPressed: controller.status == EngineStatus.ready
-                    ? () => controller.startDuplicatesScan(
-                        const ['downloads', 'documents', 'desktop'])
+                    ? () {
+                        _resolved.clear();
+                        controller.startDuplicatesScan(
+                            const ['downloads', 'documents', 'desktop']);
+                      }
                     : null,
                 icon: const Icon(Icons.copy_all),
                 label: const Text('Find duplicates'),
@@ -116,58 +75,26 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
                         final g = controller.duplicateGroups[i];
                         final copies = g['copies'] as int? ?? 0;
                         final bytes = g['fileBytes'] as int? ?? 0;
-                        final key = _groupKey(g);
-                        final ids = _candidateIds(g);
-                        final keep = _keepIndex(key);
-                        final act = _actSet(key);
-                        return ExpansionTile(
-                          title: Text(
-                              'Group ${g['groupId']} · $copies copies · ${formatBytes(bytes)} each'),
-                          subtitle: Text(
-                              'sha256:${g['sha256Short']}… · recoverable ${formatBytes(bytes * (copies - 1))}'),
-                          children: [
-                            RadioGroup<int>(
-                              groupValue: keep,
-                              onChanged: (v) => _setKeep(key, v ?? 0),
-                              child: Column(
-                                children: [
-                                  for (var k = 0; k < ids.length; k++)
-                                    ListTile(
-                                      dense: true,
-                                      leading: Radio<int>(value: k),
-                                      title: Text(ids[k],
-                                          overflow: TextOverflow.ellipsis),
-                                      subtitle: Text(k == keep
-                                          ? 'keep this copy'
-                                          : 'copy $k'),
-                                      trailing: k == keep
-                                          ? null
-                                          : Checkbox(
-                                              value: act.contains(k),
-                                              onChanged: (v) => _toggleAct(
-                                                  key, k, v ?? false),
-                                            ),
-                                    ),
-                                ],
-                              ),
+                        final resolved =
+                            _resolved.contains(g['groupId']);
+                        return Card(
+                          child: ListTile(
+                            leading: Icon(resolved
+                                ? Icons.check_circle_outline
+                                : Icons.copy_all),
+                            title: Text(
+                                'Group ${g['groupId']} · $copies identical copies · ${formatBytes(bytes)} each'),
+                            subtitle: Text(
+                                'sha256:${g['sha256Short']}… · up to '
+                                '${formatBytes(bytes * (copies - 1))} '
+                                'reclaimable logical bytes '
+                                '${resolved ? '· resolved' : ''}'),
+                            trailing: FilledButton.tonalIcon(
+                              onPressed: () => _openReview(g),
+                              icon: const Icon(Icons.fact_check_outlined),
+                              label: const Text('Review & choose keeper'),
                             ),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: FilledButton.tonalIcon(
-                                  onPressed: act.isEmpty
-                                      ? null
-                                      : () => _confirmAndCommit(context, g),
-                                  icon: const Icon(Icons.archive_outlined),
-                                  label: Text(
-                                      'Quarantine ${act.length} selected'),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
+                          ),
                         );
                       }),
             ),

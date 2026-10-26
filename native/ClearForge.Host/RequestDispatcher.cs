@@ -29,7 +29,6 @@ public sealed class RequestDispatcher
     private readonly ClearForge.Engine.Privacy.BrowserPrivacyScanner? _privacy;
     private readonly ClearForge.Engine.Privacy.BrowserCacheScanner? _cacheScan;
     private readonly ClearForge.Engine.Duplicates.ScopeRegistry? _scopes;
-    private readonly Dictionary<string, ClearForge.Engine.Duplicates.DuplicateReport> _dupeReports = new();
 
     public RequestDispatcher(ScanSessionStore scans,
         ClearForge.Engine.Cleanup.QuarantineExecutor? executor = null,
@@ -78,6 +77,7 @@ public sealed class RequestDispatcher
         Protocol.Methods.CleanupCancel => Task.FromResult(CancelScan(p)),
         Protocol.Methods.DuplicatesStart => Task.FromResult(DuplicatesStart(p)),
         Protocol.Methods.DuplicatesGroups => Task.FromResult(DuplicatesGroups(p)),
+        Protocol.Methods.DuplicatesGroup => Task.FromResult(DuplicatesGroup(p)),
         Protocol.Methods.StartupList => Task.FromResult(StartupList()),
         Protocol.Methods.PrivacyDetect => Task.FromResult(PrivacyDetect()),
         Protocol.Methods.PrivacyScanCache => Task.FromResult(PrivacyScanCache(p)),
@@ -189,6 +189,12 @@ public sealed class RequestDispatcher
         if (resolved.Count != req.CandidateIds.Distinct().Count())
             return DispatchResult.Fail(Protocol.Errors.CandidateNotFound, "one or more candidateIds not in session");
 
+        // M8.3: duplicate-group keeper/membership invariants — enforced here,
+        // at the trust boundary, before any approval is recorded.
+        if (ValidateDuplicateSelection(s, req.CandidateIds,
+                req.DuplicateGroupId, req.KeeperId) is { } dupErr)
+            return dupErr;
+
         // A successful preview records the engine-side approval a commit must
         // match — this is the authoritative approval boundary; the Flutter UI
         // is only a hint on top of it.
@@ -196,7 +202,7 @@ public sealed class RequestDispatcher
         {
             s.Approval = new ApprovalGrant(
                 resolved.Select(i => i.Public.Id).ToHashSet(StringComparer.Ordinal),
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow, req.DuplicateGroupId, req.KeeperId);
         }
 
         return DispatchResult.Ok(new
@@ -204,6 +210,8 @@ public sealed class RequestDispatcher
             sessionId = s.Id,
             candidateCount = resolved.Count,
             estimatedBytes = resolved.Sum(i => i.Public.EstimatedBytes),
+            req.DuplicateGroupId,
+            req.KeeperId,
             candidates = resolved.Select(i => new
             {
                 i.Public.Id, i.Public.DisplayName, i.Public.Category,
@@ -278,6 +286,22 @@ public sealed class RequestDispatcher
         var resolved = _scans.ResolveCandidates(s, distinct);
         if (resolved.Count != distinct.Length)
             return DispatchResult.Fail(Protocol.Errors.CandidateNotFound, "one or more candidateIds not in session");
+
+        // M8.3: the commit must echo the same group+keeper binding the
+        // preview approved — the reviewed context is part of the approval.
+        if (grant.DuplicateGroupId is not null || req.DuplicateGroupId is not null
+            || grant.KeeperId is not null || req.KeeperId is not null)
+        {
+            if (!string.Equals(grant.DuplicateGroupId, req.DuplicateGroupId, StringComparison.Ordinal)
+                || !string.Equals(grant.KeeperId, req.KeeperId, StringComparison.Ordinal))
+                return DispatchResult.Fail(Protocol.Errors.ApprovalMismatch,
+                    "commit does not match the previewed duplicate-group binding");
+        }
+        // Re-run membership + keeper-freshness gates: a keeper that changed
+        // or vanished since review means the evidence is stale — re-review.
+        if (ValidateDuplicateSelection(s, distinct,
+                req.DuplicateGroupId, req.KeeperId) is { } dupErr)
+            return dupErr;
 
         // Measured free-space delta on the quarantine volume: informational
         // only — same-volume quarantine moves are not expected to free space.
@@ -367,6 +391,78 @@ public sealed class RequestDispatcher
             ? el.GetString() : null;
     }
 
+    /// <summary>
+    /// M8.3 duplicate-review invariants, enforced at the trust boundary —
+    /// never delegated to the client. Whenever the selection intersects a
+    /// duplicate group the request must name that group and the chosen
+    /// keeper: the keeper must be a member of that group and must never be
+    /// in the quarantine set; the set may contain only other members of the
+    /// same group (selecting an entire group is therefore impossible);
+    /// stale or forged group/keeper ids are rejected; and the keeper's file
+    /// must still match its scan snapshot — a changed or vanished keeper
+    /// means the reviewed evidence is stale and must be re-reviewed.
+    /// </summary>
+    private static DispatchResult? ValidateDuplicateSelection(
+        ScanSession s, IReadOnlyList<string> rawIds,
+        string? groupId, string? keeperId)
+    {
+        var groups = s.DuplicateReport?.Groups;
+        var selected = new HashSet<string>(rawIds, StringComparer.Ordinal);
+
+        // Keeperless request: allowed only when the selection touches no
+        // duplicate group — otherwise an entire group could be quarantined
+        // with no surviving copy.
+        if (groupId is null && keeperId is null)
+        {
+            if (groups is not null && groups.Any(g =>
+                    g.Candidates.Any(c => selected.Contains(c.Id))))
+                return DispatchResult.Fail(Protocol.Errors.KeeperRequired,
+                    "selection touches a duplicate group — supply duplicateGroupId and keeperId");
+            return null;
+        }
+        if (groupId is null || keeperId is null)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams,
+                "duplicateGroupId and keeperId must be supplied together");
+        if (selected.Count != rawIds.Count)
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams,
+                "candidateIds must not contain duplicates");
+
+        var group = groups?.FirstOrDefault(g => g.GroupId == groupId);
+        if (group is null)
+            return DispatchResult.Fail(Protocol.Errors.GroupNotFound,
+                "unknown or stale duplicate group for this session");
+        var members = group.Candidates.Select(c => c.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (!members.Contains(keeperId))
+            return DispatchResult.Fail(Protocol.Errors.KeeperInvalid,
+                "keeperId is not a member of the named group");
+        if (selected.Contains(keeperId))
+            return DispatchResult.Fail(Protocol.Errors.KeeperInvalid,
+                "the keeper must never be in the quarantine set");
+        if (selected.Any(id => !members.Contains(id)))
+            return DispatchResult.Fail(Protocol.Errors.GroupMismatch,
+                "selection includes candidates outside the named group");
+
+        // Keeper freshness: the reviewed choice only stands while the file
+        // the user chose to keep still matches its scan snapshot. (Existence
+        // + identity stat only — the keeper is never opened or moved.)
+        ScannedFile? kf;
+        lock (s.Items)
+            kf = s.Items.FirstOrDefault(i => i.Public.Id == keeperId).File;
+        if (kf is null)
+            return DispatchResult.Fail(Protocol.Errors.KeeperInvalid,
+                "keeper id does not resolve in this session");
+        FileInfo current;
+        try { current = new FileInfo(kf.CanonicalPath); }
+        catch { return DispatchResult.Fail(Protocol.Errors.KeeperStale,
+            "the keeper is unreadable — rescan the group"); }
+        if (!current.Exists || current.Length != kf.LengthBytes
+            || current.LastWriteTimeUtc != kf.LastWriteUtc.UtcDateTime)
+            return DispatchResult.Fail(Protocol.Errors.KeeperStale,
+                "the keeper changed or vanished since review — rescan the group");
+        return null;
+    }
+
     // --- M3 features ---
 
     private DispatchResult DuplicatesStart(JsonElement? p)
@@ -393,8 +489,9 @@ public sealed class RequestDispatcher
         {
             try
             {
-                var report = _dupes.ScanIntoSession(session, req.ScopeIds, session.Cancellation.Token);
-                lock (_dupeReports) _dupeReports[sid] = report;
+                // ScanIntoSession attaches the report to the session itself —
+                // group evidence lives and dies with its session.
+                _dupes.ScanIntoSession(session, req.ScopeIds, session.Cancellation.Token);
                 session.Status = session.Cancellation.IsCancellationRequested
                     ? ClearForge.Engine.Scanning.SessionStatus.Cancelled
                     : ClearForge.Engine.Scanning.SessionStatus.Completed;
@@ -416,23 +513,92 @@ public sealed class RequestDispatcher
     {
         var sessionId = ParamSessionId(p);
         if (sessionId is null) return DispatchResult.Fail(Protocol.Errors.InvalidParams, "sessionId required");
-        // Reports are bounded by session lifetime: once the session store has
-        // evicted a session its report is dead weight — prune on access.
-        lock (_dupeReports)
-        {
-            foreach (var key in _dupeReports.Keys
-                         .Where(k => !_scans.TryGet(k, out _)).ToArray())
-                _dupeReports.Remove(key);
-        }
-        ClearForge.Engine.Duplicates.DuplicateReport? report;
-        lock (_dupeReports) _dupeReports.TryGetValue(sessionId, out report);
-        if (report is null) return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "no duplicate report for session");
+        // Group evidence is session-owned (M8.3): a session without a
+        // duplicate report — wrong session kind, still scanning, cancelled or
+        // failed — has no groups; an evicted session no longer exists at all.
+        if (!_scans.TryGet(sessionId, out var s) || s.DuplicateReport is not { } report)
+            return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "no duplicate report for session");
         return DispatchResult.Ok(new DuplicatesGroupsResponse(
             report.SessionId,
             report.Groups.Select(g => new DuplicateGroupDto(
                 g.GroupId, g.Sha256Short, g.FileBytes, g.Copies,
                 g.Candidates.Select(c => c.Id).ToArray())).ToArray(),
             report.EstimatedRecoverableBytes));
+    }
+
+    /// <summary>
+    /// M8.3 read-only group review: per-member path, size, mtime and a live
+    /// eligibility probe so the user can make an informed keeper choice.
+    /// Client-supplied ids are never trusted — membership resolves against
+    /// the session's own evidence. No state is recorded; this is not part of
+    /// the approval path.
+    /// </summary>
+    private DispatchResult DuplicatesGroup(JsonElement? p)
+    {
+        var (req, err) = Parse<DuplicatesGroupRequest>(p);
+        if (err is not null) return err;
+        if (req!.GroupId is not { Length: > 0 })
+            return DispatchResult.Fail(Protocol.Errors.InvalidParams, "groupId required");
+        if (!_scans.TryGet(req.SessionId, out var s))
+            return DispatchResult.Fail(Protocol.Errors.SessionNotFound, "unknown session");
+        if (s.DuplicateReport is not { } report)
+            return DispatchResult.Fail(Protocol.Errors.GroupNotFound,
+                "session has no duplicate report");
+        var group = report.Groups.FirstOrDefault(g => g.GroupId == req.GroupId);
+        if (group is null)
+            return DispatchResult.Fail(Protocol.Errors.GroupNotFound,
+                "unknown or stale duplicate group for this session");
+
+        (ScannedFile File, ScanCandidate Public)[] items;
+        SessionStatus status;
+        bool cancelled;
+        lock (s.Items)
+        {
+            status = s.Status;
+            cancelled = s.Cancellation.IsCancellationRequested;
+            items = s.Items.ToArray();
+        }
+        var byId = items.ToDictionary(i => i.Public.Id, i => i, StringComparer.Ordinal);
+        var members = group.Candidates.Select(c =>
+            byId.TryGetValue(c.Id, out var m)
+                ? new DuplicateMemberDto(c.Id, m.File.CanonicalPath,
+                    m.Public.DisplayName, m.File.LengthBytes,
+                    m.File.LastWriteUtc.ToString("O"), ProbeEligibility(m.File))
+                // Membership/session drift is shown, never hidden.
+                : new DuplicateMemberDto(c.Id, c.DisplayName, c.DisplayName,
+                    group.FileBytes, "", "unreadable")).ToArray();
+
+        // Engine suggestion only — newest write, ties break on ordinal path
+        // (the old auto-keep rule, demoted to a labelled hint). A member whose
+        // file vanished or is unreadable is never suggested.
+        var suggested = members
+            .Where(m => m.Eligibility is not ("missing" or "unreadable"))
+            .Select(m => (m.CandidateId,
+                LastWrite: DateTimeOffset.TryParse(m.LastWriteUtc, out var t)
+                    ? t : DateTimeOffset.MinValue,
+                m.Path))
+            .OrderByDescending(m => m.LastWrite)
+            .ThenBy(m => m.Path, StringComparer.Ordinal)
+            .Select(m => m.CandidateId)
+            .FirstOrDefault();
+
+        var state = GroupSessionState(s, status, cancelled);
+        var actionable = state == "live"
+            && members.Any(m => m.Eligibility == "eligible");
+        return DispatchResult.Ok(new DuplicateGroupDetailResponse(
+            s.Id, group.GroupId, group.Sha256, group.FileBytes, group.Copies,
+            group.FileBytes * (group.Copies - 1), state, actionable,
+            suggested, members));
+    }
+
+    private string GroupSessionState(ScanSession s, SessionStatus status, bool cancelled)
+    {
+        if (_executor?.SessionTtl is { } ttl
+            && DateTimeOffset.UtcNow - s.CreatedUtc > ttl) return "expired";
+        if (cancelled || status is SessionStatus.Failed or SessionStatus.Cancelled)
+            return "cancelled";
+        if (status == SessionStatus.Scanning) return "scanning";
+        return "live";
     }
 
     private DispatchResult StartupList()

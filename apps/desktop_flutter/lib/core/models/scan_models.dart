@@ -210,6 +210,10 @@ class SmartFinding {
   final List<String>? candidateIds;
   final String? duplicateOf;
 
+  /// M8.3: when non-null this actionable finding is a duplicate group that
+  /// requires explicit keeper review — it can never join a bulk commit.
+  final String? groupId;
+
   /// Live executability of the backing session, computed by the engine at
   /// answer time: 'live' | 'expired' | 'missing' | 'cancelled' | null (no
   /// binding). Anything other than 'live'/null can never commit — the
@@ -232,14 +236,20 @@ class SmartFinding {
     this.sessionId,
     this.candidateIds,
     this.duplicateOf,
+    this.groupId,
     this.sessionState,
   });
+
+  /// M8.3: duplicate-group findings execute only through the keeper-review
+  /// flow — never through bulk selection.
+  bool get requiresKeeperReview => groupId != null;
 
   /// Whether this finding may ever be selected for execution. Actionable
   /// findings whose session is expired, evicted, or cancelled are evidence
   /// only — they must rescan before they can act.
   bool get selectable =>
       actionable &&
+      !requiresKeeperReview &&
       sessionState != 'expired' &&
       sessionState != 'missing' &&
       sessionState != 'cancelled';
@@ -267,6 +277,7 @@ class SmartFinding {
         sessionId: j['sessionId'] as String?,
         candidateIds: (j['candidateIds'] as List<dynamic>?)?.cast<String>(),
         duplicateOf: j['duplicateOf'] as String?,
+        groupId: j['groupId'] as String?,
         sessionState: j['sessionState'] as String?,
       );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/scan_models.dart';
 import '../../core/state/engine_controller.dart';
+import '../duplicates/duplicate_group_review.dart';
 
 /// M8.1 unified Smart Scan: one coordinated, deduplicated view over all
 /// scan producers. Actionable findings execute only through the existing
@@ -113,9 +114,21 @@ class SmartScanScreen extends StatelessWidget {
         'est. logical (not guaranteed) · $statusText';
   }
 
-  /// Read-only review of exactly which files a finding covers. No preview
-  /// approval is recorded — this is evidence, not part of the commit path.
+  /// M8.3: duplicate-group findings open the keeper-review dialog — they can
+  /// never join the bulk selection commit (the engine requires an explicit
+  /// keeper binding for any selection touching a group). Other actionable
+  /// findings keep the read-only per-file review: no approval is recorded —
+  /// that path is evidence, not part of the commit path.
   Future<void> _showDetails(BuildContext context, SmartFinding f) async {
+    if (f.requiresKeeperReview) {
+      if (f.sessionId == null || f.groupId == null) return;
+      await DuplicateGroupReviewDialog.show(context,
+          controller: controller,
+          sessionId: f.sessionId!,
+          groupId: f.groupId!,
+          onFullyResolved: () => controller.markSmartCommitted(f.id));
+      return;
+    }
     final items = await controller.smartFindingDetails(f);
     if (!context.mounted) return;
     if (items == null) {
@@ -346,6 +359,14 @@ class _FindingsList extends StatelessWidget {
       return const Tooltip(
           message: 'session expired — rescan required',
           child: Icon(Icons.schedule_outlined, size: 20));
+    }
+    // Duplicate groups require explicit keeper review — never bulk-selected.
+    if (f.requiresKeeperReview && f.actionable) {
+      return IconButton(
+        tooltip: 'Review group — choose which copy to keep',
+        icon: const Icon(Icons.fact_check_outlined, size: 20),
+        onPressed: () => onDetails(f),
+      );
     }
     if (f.actionable && f.selectable) {
       return Checkbox(

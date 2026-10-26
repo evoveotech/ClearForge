@@ -14,7 +14,12 @@ public enum SessionStatus { Scanning, Completed, Cancelled, Failed }
 /// </summary>
 public sealed record ApprovalGrant(
     IReadOnlySet<string> CandidateIds,
-    DateTimeOffset GrantedUtc);
+    DateTimeOffset GrantedUtc,
+    // M8.3: when the previewed set is a duplicate-group quarantine, the
+    // reviewed group and the member the user chose to keep. Commit must echo
+    // the same binding — a mismatch is approval_mismatch.
+    string? DuplicateGroupId = null,
+    string? KeeperId = null);
 
 /// <summary>Bounds for in-memory scan-session retention.</summary>
 public sealed record ScanSessionOptions(
@@ -73,6 +78,16 @@ public sealed class ScanSession
     /// ids it contains. Read/write under lock(Items).
     /// </summary>
     public ApprovalGrant? Approval { get; set; }
+
+    /// <summary>
+    /// M8.3: duplicate-group evidence produced by DuplicateFinder for this
+    /// session — set for both `duplicates.start` sessions and Smart Scan
+    /// child sessions so keeper/group invariants can be enforced at the
+    /// preview/commit boundary regardless of entry point. Null for
+    /// non-duplicate scans. Owned by the session: it dies with eviction and
+    /// needs no separate pruning.
+    /// </summary>
+    public Duplicates.DuplicateReport? DuplicateReport { get; set; }
 }
 
 /// <summary>

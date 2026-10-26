@@ -257,11 +257,17 @@ class EngineController extends ChangeNotifier {
       String sessionId, List<String> ids, List<CleanupItemOutcome> outcomes,
       {Set<String>? cleanedIds,
       Set<String>? staleSessions,
+      String? duplicateGroupId,
+      String? keeperId,
       void Function(int?)? onDelta}) async {
     for (var i = 0; i < ids.length; i += _commitChunkSize) {
       final chunk = ids.sublist(i, (i + _commitChunkSize).clamp(0, ids.length));
+      final binding = <String, dynamic>{
+        'duplicateGroupId': ?duplicateGroupId,
+        'keeperId': ?keeperId,
+      };
       final preview = await _client!.call('cleanup.preview',
-          {'sessionId': sessionId, 'candidateIds': chunk});
+          {'sessionId': sessionId, 'candidateIds': chunk, ...binding});
       if (preview['error'] != null) {
         final code = preview['error']['code'] as String? ?? 'preview_failed';
         if (code == 'session_expired' || code == 'session_not_found') {
@@ -271,7 +277,7 @@ class EngineController extends ChangeNotifier {
         return;
       }
       final res = await _client!.call('cleanup.commit',
-          {'sessionId': sessionId, 'candidateIds': chunk});
+          {'sessionId': sessionId, 'candidateIds': chunk, ...binding});
       if (res['error'] != null) {
         final code = res['error']['code'] as String? ?? 'commit_failed';
         if (code == 'session_expired' || code == 'session_not_found') {
@@ -492,6 +498,13 @@ class EngineController extends ChangeNotifier {
         'smartscan.cancel', {'smartScanId': smartScan!.smartScanId});
   }
 
+  /// M8.3: mark a keeper-reviewed duplicate finding as resolved after its
+  /// commit fully succeeded — it stays visible as completed work.
+  void markSmartCommitted(String findingId) {
+    smartCommitted.add(findingId);
+    notifyListeners();
+  }
+
   void toggleSmartSelected(String id, bool value) {
     final f = smartScan?.findings.firstWhere(
         (x) => x.id == id,
@@ -597,6 +610,9 @@ class EngineController extends ChangeNotifier {
 
   // --- M3 feature state ---
   List<Map<String, dynamic>> duplicateGroups = [];
+
+  /// The session that produced [duplicateGroups] — group review binds to it.
+  String? duplicateSessionId;
   List<Map<String, dynamic>> startupEntries = [];
   List<Map<String, dynamic>> privacyProfiles = [];
 
@@ -616,6 +632,7 @@ class EngineController extends ChangeNotifier {
     }
     final sid = res['result']?['sessionId'] as String?;
     if (sid == null) return;
+    duplicateSessionId = sid;
     // Poll until the scan completes, then fetch groups.
     for (var i = 0; i < 200; i++) {
       await Future.delayed(const Duration(milliseconds: 250));
@@ -630,17 +647,39 @@ class EngineController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Quarantine chosen duplicate copies through the normal
-  /// preview → commit path. The engine refuses the commit without a
-  /// matching preview approval, so the preview is mandatory, not cosmetic.
-  Future<bool> commitDuplicateCandidates(
-      String sessionId, List<String> candidateIds) async {
-    if (_client == null || candidateIds.isEmpty) return false;
+  /// M8.3: read-only per-member detail for one duplicate group — paths,
+  /// sizes, mtimes, live eligibility, and the engine's keeper suggestion.
+  /// Returns null when the session/group is gone or stale.
+  Future<Map<String, dynamic>?> duplicateGroupDetail(
+      String sessionId, String groupId) async {
+    if (_client == null) return null;
+    final res = await _client!.call(
+        'duplicates.group', {'sessionId': sessionId, 'groupId': groupId});
+    if (res['error'] != null) return null;
+    return res['result'] as Map<String, dynamic>?;
+  }
+
+  /// M8.3: quarantine exactly [candidateIds] of [groupId], keeping
+  /// [keeperId]. The keeper binding is echoed through preview and commit —
+  /// the engine enforces membership, excludes the keeper, and re-checks
+  /// keeper freshness at commit; approval widening is impossible.
+  /// Per-item outcomes land in [lastCommitResults]; returns the structured
+  /// failure code when the engine refuses.
+  Future<String?> commitDuplicateGroup(String sessionId, String groupId,
+      String keeperId, List<String> candidateIds) async {
+    if (_client == null || candidateIds.isEmpty) return 'invalid_params';
+    status = EngineStatus.executing;
+    notifyListeners();
     final outcomes = <CleanupItemOutcome>[];
-    await _commitSessionChunked(sessionId, candidateIds, outcomes);
+    await _commitSessionChunked(sessionId, candidateIds, outcomes,
+        duplicateGroupId: groupId, keeperId: keeperId);
+    status = EngineStatus.ready;
+    lastCommitResults = outcomes;
+    notifyListeners();
     unawaited(refreshHistory());
-    return outcomes.isNotEmpty &&
-        outcomes.every((o) => o.status != 'error');
+    if (outcomes.isEmpty) return 'no_outcome';
+    final failure = outcomes.where((o) => o.status == 'error');
+    return failure.isEmpty ? null : failure.first.errorCode;
   }
 
   Future<void> loadStartup() async {

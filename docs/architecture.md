@@ -1,5 +1,33 @@
 # ClearForge Architecture (M0–M2 as built)
 
+**M8.3 additions (duplicate review):** duplicate cleanup is now an explicit
+review flow rather than an auto-kept list. `ScanSession` owns its
+`DuplicateReport` (set by `DuplicateFinder.ScanIntoSession` for
+`duplicates.start` and Smart Scan child sessions alike — replaces the
+dispatcher-side report map, dies with eviction). New read-only IPC
+`duplicates.group` returns per-member path, size, mtime, live eligibility
+probe, the full SHA-256, a labelled `suggestedKeeperId` (newest write, ties
+→ ordinal path — a hint, never a decision), `sessionState` and
+`actionable`. Member paths are exposed here deliberately: keeper choice is
+meaningless without locations, the pipe is owner-only local IPC, and
+finding evidence already carried member paths.
+`cleanup.preview`/`cleanup.commit` accept optional `duplicateGroupId` +
+`keeperId`, required together whenever a selection touches a duplicate
+group: keeper must be a member and never in the quarantine set
+(`keeper_required`/`keeper_invalid`/`group_not_found`/`group_mismatch`),
+candidateIds must be distinct, and the keeper's file must still match its
+scan snapshot at commit (`keeper_stale`). The `ApprovalGrant` records the
+group+keeper; commit must echo the same binding (`approval_mismatch`).
+Selecting an entire group is now impossible — the keeper always survives.
+`SmartFinding` gains `groupId`; `DuplicatesProducer` binds ALL members (no
+auto-keeper) so the UI routes duplicate findings to keeper review instead
+of bulk selection. The shared review dialog (Duplicates screen and Smart
+Scan) shows full copyable paths, per-member eligibility reasons, the
+KEEP/QUARANTINE/left-in-place split at confirmation, and honest
+empty/loading/stale/error/success states. No new mutation path — execution
+still flows exclusively through preview → approval → journaled quarantine →
+SHA-256 → restore. Tests: `M83Tests.cs`, `duplicate_review_test.dart`.
+
 **M8.2 additions (cleanup coverage):** the compiled catalog grew from 2 to 15
 versioned rules across 6 quarantinable categories — existing
 `temporary-files`/`crash-dumps` plus `thumbnail-cache` (Explorer

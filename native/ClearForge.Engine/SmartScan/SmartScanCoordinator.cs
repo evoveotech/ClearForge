@@ -32,7 +32,11 @@ public sealed record SmartFinding(
     string? SkipReason,
     string? SessionId,
     IReadOnlyList<string>? CandidateIds,
-    string? DuplicateOf = null);
+    string? DuplicateOf = null,
+    // M8.3: when set, execution requires explicit keeper review — the finding
+    // names a group inside SessionId's duplicate report and can only act
+    // through the keeper-bound preview/commit path, never bulk-select.
+    string? GroupId = null);
 
 public sealed record ProducerReport(
     string ProducerId, ProducerStatus Status, string? Diagnostic, int Findings);

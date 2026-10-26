@@ -23,6 +23,8 @@ public static class Protocol
         public const string CleanupCancel = "cleanup.cancel";
         public const string DuplicatesStart = "duplicates.start";
         public const string DuplicatesGroups = "duplicates.groups";
+        // M8.3: read-only per-member group review for keeper selection.
+        public const string DuplicatesGroup = "duplicates.group";
         public const string StartupList = "startup.list";
         public const string PrivacyDetect = "privacy.detect";
         public const string PrivacyScanCache = "privacy.scanCache";
@@ -89,6 +91,13 @@ public static class Protocol
         public const string ApprovalStale = "approval_stale";
         public const string ApprovalMismatch = "approval_mismatch";
         public const string SessionCapacity = "session_capacity";
+
+        // M8.3 duplicate keeper/group enforcement at the preview/commit boundary
+        public const string GroupNotFound = "group_not_found";
+        public const string KeeperRequired = "keeper_required";
+        public const string KeeperInvalid = "keeper_invalid";
+        public const string KeeperStale = "keeper_stale";
+        public const string GroupMismatch = "group_mismatch";
 
         // M3
         public const string ScopeNotAllowed = "scope_not_allowed";

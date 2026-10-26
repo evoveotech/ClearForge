@@ -57,11 +57,20 @@ public sealed record SessionRequest(
 
 public sealed record PreviewCleanupRequest(
     [property: JsonPropertyName("sessionId")] string SessionId,
-    [property: JsonPropertyName("candidateIds")] IReadOnlyList<string> CandidateIds);
+    [property: JsonPropertyName("candidateIds")] IReadOnlyList<string> CandidateIds,
+    // M8.3: explicit duplicate-review binding. Both required together whenever
+    // the selection touches a duplicate group — the keeper is the member the
+    // user chose to retain; it must never appear in the quarantine set.
+    [property: JsonPropertyName("duplicateGroupId")] string? DuplicateGroupId = null,
+    [property: JsonPropertyName("keeperId")] string? KeeperId = null);
 
 public sealed record CommitCleanupRequest(
     [property: JsonPropertyName("sessionId")] string SessionId,
-    [property: JsonPropertyName("candidateIds")] IReadOnlyList<string> CandidateIds);
+    [property: JsonPropertyName("candidateIds")] IReadOnlyList<string> CandidateIds,
+    // Echoed back to prove the commit covers the same reviewed group+keeper
+    // the preview approved — a mismatch fails approval_mismatch.
+    [property: JsonPropertyName("duplicateGroupId")] string? DuplicateGroupId = null,
+    [property: JsonPropertyName("keeperId")] string? KeeperId = null);
 
 public sealed record CleanupCommitResponse(
     [property: JsonPropertyName("sessionId")] string SessionId,
@@ -114,6 +123,46 @@ public sealed record DuplicatesGroupsResponse(
     [property: JsonPropertyName("sessionId")] string SessionId,
     [property: JsonPropertyName("groups")] IReadOnlyList<DuplicateGroupDto> Groups,
     [property: JsonPropertyName("estimatedRecoverableBytes")] long EstimatedRecoverableBytes);
+
+// --- M8.3 duplicate group review ---
+
+public sealed record DuplicatesGroupRequest(
+    [property: JsonPropertyName("sessionId")] string SessionId,
+    [property: JsonPropertyName("groupId")] string GroupId);
+
+/// <summary>
+/// One member of a duplicate group, shown for review. The canonical path is
+/// exposed deliberately: choosing which copy to keep is meaningless without
+/// distinguishing locations. The pipe is owner-only local IPC and finding
+/// evidence already carried member paths.
+/// </summary>
+public sealed record DuplicateMemberDto(
+    [property: JsonPropertyName("candidateId")] string CandidateId,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("fileName")] string FileName,
+    [property: JsonPropertyName("bytes")] long Bytes,
+    [property: JsonPropertyName("lastWriteUtc")] string LastWriteUtc,
+    // Same vocabulary as the preview eligibility probe:
+    // eligible|missing|changed|locked|reparse_point|elevation_required|unreadable
+    [property: JsonPropertyName("eligibility")] string Eligibility);
+
+public sealed record DuplicateGroupDetailResponse(
+    [property: JsonPropertyName("sessionId")] string SessionId,
+    [property: JsonPropertyName("groupId")] string GroupId,
+    [property: JsonPropertyName("sha256")] string Sha256,
+    [property: JsonPropertyName("fileBytes")] long FileBytes,
+    [property: JsonPropertyName("copies")] int Copies,
+    // (copies-1)*fileBytes — a logical estimate of what quarantining every
+    // non-keeper would move, never promised freed disk space.
+    [property: JsonPropertyName("estimatedReclaimableLogicalBytes")] long EstimatedReclaimableLogicalBytes,
+    // live|expired|missing|cancelled|scanning — same vocabulary as findings.
+    [property: JsonPropertyName("sessionState")] string SessionState,
+    // live session AND at least one member currently eligible to quarantine.
+    [property: JsonPropertyName("actionable")] bool Actionable,
+    // Engine suggestion only (newest write, ties → ordinal path) — the client
+    // must surface it as a suggestion and still require an explicit choice.
+    [property: JsonPropertyName("suggestedKeeperId")] string? SuggestedKeeperId,
+    [property: JsonPropertyName("members")] IReadOnlyList<DuplicateMemberDto> Members);
 
 public sealed record StartupEntryDto(
     [property: JsonPropertyName("name")] string Name,
